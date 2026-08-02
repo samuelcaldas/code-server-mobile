@@ -244,6 +244,33 @@ describe("mobile editor state transitions", ["--disable-workspace-trust"], {}, (
 })
 
 describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => {
+  test("should expose touch-sized menu, tab close, and panel controls", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const applicationMenu = page.getByRole("menuitem", { name: "Application Menu" })
+    const panelToggle = page.getByRole("button", { name: /Toggle Panel/ })
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+
+    await explorer.tap()
+    await page.getByRole("treeitem", { name: /config.yaml/ }).tap()
+    const editorTab = page.locator('.tabs-container [role="tab"]', { hasText: "config.yaml" })
+    const closeTab = editorTab.getByRole("button", { name: /Close/ })
+
+    const touchTargets = [
+      ["Application Menu", applicationMenu],
+      ["Toggle Panel", panelToggle],
+      ["Close Tab", closeTab],
+    ] as const
+    for (const [name, target] of touchTargets) {
+      const bounds = await target.boundingBox()
+      expect(bounds, name).not.toBeNull()
+      expect(bounds!.width, `${name} width`).toBeGreaterThanOrEqual(44)
+      expect(bounds!.height, `${name} height`).toBeGreaterThanOrEqual(44)
+    }
+
+    await closeTab.tap()
+    await expect(editorTab).toBeHidden()
+  })
+
   test("should open Explorer without resizing the editor", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const editor = page.locator("#workbench\\.parts\\.editor")
