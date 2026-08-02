@@ -236,4 +236,28 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     expect(panelBounds!.y + panelBounds!.height).toBe(editorBoundsBefore!.y + editorBoundsBefore!.height)
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
+
+  test("should restore the desktop sidebar selection after compact navigation", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const workbench = page.locator("div.monaco-workbench")
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+    const search = page.getByRole("tab", { name: /Search/ })
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    if ((await explorer.getAttribute("aria-selected")) !== "true") {
+      await explorer.tap()
+    }
+    await expect(explorer).toHaveAttribute("aria-selected", "true")
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await search.tap()
+    await expect(page.locator(".mobile-navigation-overlay--sidebar")).toBeVisible()
+    await expect(search).toHaveAttribute("aria-selected", "true")
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+
+    await expect(workbench).not.toHaveClass(/phone-layout/)
+    await expect(page.locator(".mobile-navigation-overlay--sidebar")).toBeHidden()
+    await expect(explorer).toHaveAttribute("aria-selected", "true")
+  })
 })
