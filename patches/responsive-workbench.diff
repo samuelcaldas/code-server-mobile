@@ -463,7 +463,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/viewportPolic
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/test/browser/viewportPolicy.test.ts
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,132 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -481,69 +481,92 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/viewportPolic
 +		return disposables.add(new WorkbenchViewportPolicy());
 +	}
 +
-+	test('classifies widths into phone, tablet and desktop', () => {
++	test('classifies portrait, landscape, tablet and desktop geometry', () => {
 +		const policy = createPolicy();
 +
-+		policy.update(390);
++		policy.update(390, 844);
 +		assert.strictEqual(policy.viewportClass.get(), 'phone');
 +
-+		policy.update(800);
++		policy.update(844, 390);
++		assert.strictEqual(policy.viewportClass.get(), 'phone');
++
++		policy.update(800, 600);
 +		assert.strictEqual(policy.viewportClass.get(), 'tablet');
 +
-+		policy.update(1280);
++		policy.update(1280, 800);
 +		assert.strictEqual(policy.viewportClass.get(), 'desktop');
 +	});
 +
-+	test('treats the breakpoints as exclusive upper bounds', () => {
++	test('treats geometry breakpoints as exclusive upper bounds', () => {
 +		const policy = createPolicy();
 +
-+		policy.update(639);
++		policy.update(639, 844);
 +		assert.strictEqual(policy.viewportClass.get(), 'phone');
 +
-+		policy.update(640);
++		policy.update(640, 844);
 +		assert.strictEqual(policy.viewportClass.get(), 'tablet');
 +
-+		policy.update(1023);
++		policy.update(959, 479);
++		assert.strictEqual(policy.viewportClass.get(), 'phone');
++
++		policy.update(960, 479);
 +		assert.strictEqual(policy.viewportClass.get(), 'tablet');
 +
-+		policy.update(1024);
++		policy.update(959, 480);
++		assert.strictEqual(policy.viewportClass.get(), 'tablet');
++
++		policy.update(1023, 800);
++		assert.strictEqual(policy.viewportClass.get(), 'tablet');
++
++		policy.update(1024, 800);
 +		assert.strictEqual(policy.viewportClass.get(), 'desktop');
 +	});
 +
-+	test('classifies on width alone, independently of the user agent', () => {
++	test('classifies on geometry alone, independently of the user agent', () => {
 +		// Samsung DeX keeps the Android user agent while presenting a large
-+		// display, so a narrow viewport must classify as phone and a wide one
-+		// as desktop regardless of the device the browser reports.
++		// display, so geometry must decide the topology regardless of the device
++		// the browser reports.
 +		const policy = createPolicy();
 +
-+		policy.update(360);
++		policy.update(360, 800);
 +		assert.strictEqual(policy.viewportClass.get(), 'phone');
 +
-+		policy.update(1920);
++		policy.update(1920, 1080);
 +		assert.strictEqual(policy.viewportClass.get(), 'desktop');
++	});
++
++	test('ignores invalid geometry', () => {
++		const policy = createPolicy();
++		policy.update(390, 844);
++
++		assert.strictEqual(policy.update(0, 844), false);
++		assert.strictEqual(policy.update(390, 0), false);
++		assert.strictEqual(policy.update(Number.NaN, 844), false);
++		assert.strictEqual(policy.update(390, Number.POSITIVE_INFINITY), false);
++		assert.strictEqual(policy.viewportClass.get(), 'phone');
 +	});
 +
 +	test('isPhoneLayout tracks the viewport class', () => {
 +		const policy = createPolicy();
 +
-+		policy.update(390);
++		policy.update(390, 844);
 +		assert.strictEqual(policy.isPhoneLayout.get(), true);
 +
-+		policy.update(1280);
++		policy.update(1280, 800);
 +		assert.strictEqual(policy.isPhoneLayout.get(), false);
 +	});
 +
 +	test('update reports whether the classification changed', () => {
 +		const policy = createPolicy();
 +
-+		assert.strictEqual(policy.update(390), true, 'desktop to phone is a change');
-+		assert.strictEqual(policy.update(400), false, 'still phone');
-+		assert.strictEqual(policy.update(1280), true, 'phone to desktop is a change');
++		assert.strictEqual(policy.update(390, 844), true, 'desktop to phone is a change');
++		assert.strictEqual(policy.update(400, 800), false, 'still phone');
++		assert.strictEqual(policy.update(1280, 800), true, 'phone to desktop is a change');
 +	});
 +
 +	test('hides sidebar, auxiliary bar and panel by default on phone', () => {
 +		const policy = createPolicy();
-+		policy.update(390);
++		policy.update(390, 844);
 +
 +		assert.deepStrictEqual(policy.getPartVisibilityDefaults(), {
 +			sidebar: false,
@@ -554,22 +577,22 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/viewportPolic
 +
 +	test('keeps the sidebar visible by default on desktop', () => {
 +		const policy = createPolicy();
-+		policy.update(1280);
++		policy.update(1280, 800);
 +
 +		assert.strictEqual(policy.getPartVisibilityDefaults().sidebar, true);
 +	});
 +
 +	test('override pins the classification and can be cleared', () => {
 +		const policy = createPolicy();
-+		policy.update(1280);
++		policy.update(1280, 800);
 +
 +		policy.setOverride('phone');
-+		assert.strictEqual(policy.viewportClass.get(), 'phone', 'override wins over width');
++		assert.strictEqual(policy.viewportClass.get(), 'phone', 'override wins over geometry');
 +
-+		policy.update(1920);
++		policy.update(1920, 1080);
 +		assert.strictEqual(policy.viewportClass.get(), 'phone', 'override survives layout passes');
 +
 +		policy.setOverride(undefined);
-+		assert.strictEqual(policy.viewportClass.get(), 'desktop', 'clearing restores width classification');
++		assert.strictEqual(policy.viewportClass.get(), 'desktop', 'clearing restores geometry classification');
 +	});
 +});

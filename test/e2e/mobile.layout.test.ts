@@ -36,18 +36,56 @@ describe("mobile layout", ["--disable-workspace-trust"], {}, () => {
     expect(box!.width).toBeGreaterThanOrEqual(44)
   })
 
-  test("should restore desktop part visibility after a live transition", async ({ codeServerPage }) => {
+  test("should keep compact layout through rotation and restore it for DeX", async ({ codeServerPage }) => {
     const workbench = codeServerPage.page.locator("div.monaco-workbench")
     const sidebar = codeServerPage.page.locator(".part.sidebar")
 
     await expect(workbench).toHaveClass(/phone-layout/)
     await expect(sidebar).toBeHidden()
 
-    // Widening past the breakpoint models plugging into DeX. The workbench must
-    // restore its desktop layout in place rather than reload and lose state.
+    // Rotation changes both dimensions but remains phone geometry. No reload or
+    // desktop split should interrupt the editor between portrait and landscape.
+    await codeServerPage.page.setViewportSize({ width: 844, height: 390 })
+
+    await expect(workbench).toHaveClass(/phone-layout/)
+    await expect(sidebar).toBeHidden()
+
+    // Widening past the desktop breakpoint models plugging into DeX.
     await codeServerPage.page.setViewportSize({ width: 1280, height: 800 })
 
     await expect(workbench).not.toHaveClass(/phone-layout/)
     await expect(sidebar).toBeVisible()
+  })
+})
+
+describe("mobile layout persistence", ["--disable-workspace-trust"], {}, () => {
+  test("should retain desktop visibility choices across compact reload", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const workbench = page.locator("div.monaco-workbench")
+    const sidebar = page.locator(".part.sidebar")
+    const panel = page.locator(".part.panel")
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(workbench).not.toHaveClass(/phone-layout/)
+
+    await codeServerPage.executeCommandViaMenus("View: Toggle Primary Side Bar Visibility")
+    await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+
+    await expect(sidebar).toBeHidden()
+    await expect(panel).toBeVisible()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(workbench).toHaveClass(/phone-layout/)
+    await expect(sidebar).toBeHidden()
+    await expect(panel).toBeHidden()
+
+    await codeServerPage.stateFlush()
+    await page.reload()
+    await codeServerPage.reloadUntilEditorIsReady()
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(workbench).not.toHaveClass(/phone-layout/)
+    await expect(sidebar).toBeHidden()
+    await expect(panel).toBeVisible()
   })
 })
