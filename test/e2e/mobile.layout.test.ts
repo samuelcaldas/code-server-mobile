@@ -302,6 +302,34 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
 
+  test("should keep keyboard focus inside the navigation overlay", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const overlay = page.locator(".mobile-navigation-overlay--sidebar")
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",")
+
+    await explorer.tap()
+    await expect(overlay).toBeVisible()
+
+    for (const boundary of ["first", "last"] as const) {
+      await overlay.evaluate((element, { boundary, focusableSelector }) => {
+        const focusableElements = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector))
+          .filter(candidate => candidate.getClientRects().length > 0)
+        const target = boundary === "first" ? focusableElements[0] : focusableElements[focusableElements.length - 1]
+        target?.focus()
+      }, { boundary, focusableSelector })
+      await page.keyboard.press(boundary === "first" ? "Shift+Tab" : "Tab")
+      expect(await overlay.evaluate(element => element.contains(document.activeElement))).toBe(true)
+    }
+  })
+
   test("should move from Explorer to editing and Source Control by touch", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const overlay = page.locator(".mobile-navigation-overlay--sidebar")
@@ -319,6 +347,25 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await sourceControl.tap()
     await expect(overlay).toBeVisible()
     await expect(sourceControl).toHaveAttribute("aria-selected", "true")
+  })
+
+  test("should open the secondary side bar without resizing the editor", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const editor = page.locator("#workbench\\.parts\\.editor")
+    const auxiliaryBar = page.locator(".part.auxiliarybar")
+
+    const editorBoundsBefore = await editor.boundingBox()
+    expect(editorBoundsBefore).not.toBeNull()
+
+    await codeServerPage.executeCommandViaMenus("View: Toggle Secondary Side Bar Visibility")
+
+    await expect(auxiliaryBar).toHaveClass(/mobile-navigation-overlay--auxiliarybar/)
+    await expect(auxiliaryBar).toBeVisible()
+    expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
+
+    await codeServerPage.executeCommandViaMenus("View: Toggle Secondary Side Bar Visibility")
+    await expect(auxiliaryBar).toBeHidden()
+    expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
 
   test("should open the panel as a bottom sheet", async ({ codeServerPage }) => {
