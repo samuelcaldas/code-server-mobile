@@ -30,15 +30,16 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 ===================================================================
 --- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/layout.ts
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
-@@ -8,6 +8,7 @@ import { Event, Emitter } from '../../ba
+@@ -8,6 +8,8 @@ import { Event, Emitter } from '../../ba
  import { alert } from '../../base/browser/ui/aria/aria.js';
  import { EventType, addDisposableListener, getClientArea, size, IDimension, isAncestorUsingFlowTo, computeScreenAwareSize, getActiveDocument, getWindows, getActiveWindow, isActiveDocument, getWindow, getWindowId, getActiveElement, Dimension } from '../../base/browser/dom.js';
  import { onDidChangeFullscreen, isFullscreen, isWCOEnabled } from '../../base/browser/browser.js';
 +import { IPartVisibilityDefaults, PHONE_LAYOUT_CLASS, WorkbenchViewportPolicy } from './viewportPolicy.js';
++import { MobileNavigationOverlayController } from './mobileNavigation.js';
  import { isWindows, isLinux, isMacintosh, isWeb, isIOS } from '../../base/common/platform.js';
  import { EditorInputCapabilities, GroupIdentifier, isResourceEditorInput, IUntypedEditorInput, pathsToEditors } from '../common/editor.js';
  import { SidebarPart } from './parts/sidebar/sidebarPart.js';
-@@ -149,6 +150,13 @@ export const TITLE_BAR_SETTINGS = [
+@@ -149,6 +151,13 @@ export const TITLE_BAR_SETTINGS = [
  const DEFAULT_EMPTY_WINDOW_DIMENSIONS = new Dimension(DEFAULT_EMPTY_WINDOW_SIZE.width, DEFAULT_EMPTY_WINDOW_SIZE.height);
  const DEFAULT_WORKSPACE_WINDOW_DIMENSIONS = new Dimension(DEFAULT_WORKSPACE_WINDOW_SIZE.width, DEFAULT_WORKSPACE_WINDOW_SIZE.height);
  
@@ -52,17 +53,18 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  export abstract class Layout extends Disposable implements IWorkbenchLayoutService {
  
  	declare readonly _serviceBrand: undefined;
-@@ -223,6 +231,9 @@ export abstract class Layout extends Dis
+@@ -223,6 +232,10 @@ export abstract class Layout extends Dis
  		return this.containerStylesLoaded.get(window.vscodeWindowId);
  	}
  
 +	private readonly viewportPolicy = this._register(new WorkbenchViewportPolicy());
 +	private desktopLayoutState: IDesktopLayoutState | undefined;
++	private mobileNavigationOverlay: MobileNavigationOverlayController | undefined;
 +
  	private _mainContainerDimension!: IDimension;
  	get mainContainerDimension(): IDimension { return this._mainContainerDimension; }
  
-@@ -727,6 +738,7 @@ export abstract class Layout extends Dis
+@@ -727,6 +740,7 @@ export abstract class Layout extends Dis
  			mainContainerDimension: this._mainContainerDimension,
  			resetLayout: Boolean(this.layoutOptions?.resetLayout)
  		});
@@ -70,7 +72,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  
  		this._register(this.stateModel.onDidChangeState(change => {
  			if (change.key === LayoutStateKeys.ACTIVITYBAR_HIDDEN) {
-@@ -840,6 +852,22 @@ export abstract class Layout extends Dis
+@@ -840,6 +854,22 @@ export abstract class Layout extends Dis
  		this.updateWindowBorder(true);
  	}
  
@@ -93,7 +95,19 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	private getDefaultLayoutViews(environmentService: IBrowserWorkbenchEnvironmentService, storageService: IStorageService): string[] | undefined {
  		const defaultLayout = environmentService.options?.defaultLayout;
  		if (!defaultLayout) {
-@@ -1721,7 +1749,7 @@ export abstract class Layout extends Dis
+@@ -1672,6 +1702,11 @@ export abstract class Layout extends Dis
+ 		this.mainContainer.setAttribute('role', 'application');
+ 		this.workbenchGrid = workbenchGrid;
+ 		this.workbenchGrid.edgeSnapping = this.state.runtime.mainWindowFullscreen;
++		this.mobileNavigationOverlay = this._register(new MobileNavigationOverlayController(
++			this.mainContainer,
++			part => this.getPart(part),
++			() => editorPart.getContainer()?.getBoundingClientRect() ?? this.mainContainer.getBoundingClientRect()
++		));
+ 
+ 		for (const part of [titleBar, editorPart, activityBar, panelPart, sideBar, statusBar, auxiliaryBarPart, bannerPart]) {
+ 			this._register(part.onDidVisibilityChange(visible => {
+@@ -1721,7 +1756,7 @@ export abstract class Layout extends Dis
  				: this.workbenchGrid.getViewSize(this.auxiliaryBarPartView).width;
  			this.stateModel.setInitializationValue(LayoutStateKeys.AUXILIARYBAR_SIZE, auxiliaryBarSize as number);
  
@@ -102,7 +116,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  		}));
  
  		this._register(Event.any(this.paneCompositeService.onDidPaneCompositeOpen, this.paneCompositeService.onDidPaneCompositeClose)(() => {
-@@ -1741,6 +1769,8 @@ export abstract class Layout extends Dis
+@@ -1741,10 +1776,13 @@ export abstract class Layout extends Dis
  
  			this.logService.trace(`Layout#layout, height: ${this._mainContainerDimension.height}, width: ${this._mainContainerDimension.width}`);
  
@@ -111,7 +125,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			size(this.mainContainer, this._mainContainerDimension.width, this._mainContainerDimension.height);
  
  			// Layout the grid widget
-@@ -1752,6 +1782,86 @@ export abstract class Layout extends Dis
+ 			this.workbenchGrid.layout(this._mainContainerDimension.width, this._mainContainerDimension.height);
++			this.mobileNavigationOverlay?.layout();
+ 			this.initialized = true;
+ 
+ 			// Emit as event
+@@ -1752,6 +1790,87 @@ export abstract class Layout extends Dis
  		}
  	}
  
@@ -173,6 +192,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +	}
 +
 +	private exitPhoneLayout(): void {
++		this.closeMobileNavigationOverlay();
 +		const desktopLayoutState = this.desktopLayoutState;
 +		if (!desktopLayoutState) {
 +			return;
@@ -198,7 +218,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	isMainEditorLayoutCentered(): boolean {
  		return this.stateModel.getRuntimeValue(LayoutStateKeys.MAIN_EDITOR_CENTERED);
  	}
-@@ -1906,6 +2016,7 @@ export abstract class Layout extends Dis
+@@ -1906,6 +2025,7 @@ export abstract class Layout extends Dis
  
  	getLayoutClasses(): string[] {
  		return coalesce([
@@ -206,7 +226,39 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			!this.isVisible(Parts.SIDEBAR_PART) ? LayoutClasses.SIDEBAR_HIDDEN : undefined,
  			!this.isVisible(Parts.EDITOR_PART, mainWindow) ? LayoutClasses.MAIN_EDITOR_AREA_HIDDEN : undefined,
  			!this.isVisible(Parts.PANEL_PART) ? LayoutClasses.PANEL_HIDDEN : undefined,
-@@ -3120,22 +3231,50 @@ class LayoutStateModel extends Disposabl
+@@ -2304,7 +2424,31 @@ export abstract class Layout extends Dis
+ 		}
+ 	}
+ 
++	tryShowMobileNavigationOverlay(part: Parts): boolean {
++		if (!this.viewportPolicy.isPhoneLayout.get()) {
++			return false;
++		}
++
++		return this.mobileNavigationOverlay?.show(part) ?? false;
++	}
++
++	closeMobileNavigationOverlay(part?: Parts): boolean {
++		return this.mobileNavigationOverlay?.close(part) ?? false;
++	}
++
++	isMobileNavigationOverlay(part: Parts): boolean {
++		return this.mobileNavigationOverlay?.isActive(part) ?? false;
++	}
++
+ 	setPartHidden(hidden: boolean, part: Parts): void {
++		if (!hidden && this.tryShowMobileNavigationOverlay(part)) {
++			return;
++		}
++
++		if (hidden && this.closeMobileNavigationOverlay(part)) {
++			return;
++		}
++
+ 		switch (part) {
+ 			case Parts.ACTIVITYBAR_PART:
+ 				return this.setActivityBarHidden(hidden);
+@@ -3120,22 +3264,50 @@ class LayoutStateModel extends Disposabl
  		this.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, value);
  	}
  
@@ -267,7 +319,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	}
  
  	getInitializationValue<T extends StorageKeyType>(key: InitializationStateKey<T>): T {
-@@ -3195,9 +3334,9 @@ class LayoutStateModel extends Disposabl
+@@ -3195,9 +3367,9 @@ class LayoutStateModel extends Disposabl
  		this._onDidChangeState.fire({ key, value });
  	}
  
@@ -284,7 +336,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,128 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -370,6 +422,47 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +.monaco-workbench.phone-layout .quick-input-widget .quick-input-list .monaco-list-row,
 +.monaco-workbench.phone-layout .quick-input-widget .quick-input-tree .monaco-list-row {
 +	min-height: 44px;
++}
++
++/* ---- Phone Layout: Navigation Overlays ---- */
++
++.monaco-workbench.phone-layout .mobile-navigation-backdrop {
++	position: fixed;
++	z-index: 2521;
++	top: var(--mobile-navigation-top);
++	left: var(--mobile-navigation-left);
++	width: var(--mobile-navigation-width);
++	height: var(--mobile-navigation-height);
++	background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
++	touch-action: manipulation;
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-overlay-host {
++	display: block !important;
++	position: fixed !important;
++	z-index: 2522 !important;
++	top: var(--mobile-navigation-top) !important;
++	left: var(--mobile-navigation-left) !important;
++	width: var(--mobile-navigation-width) !important;
++	height: var(--mobile-navigation-height) !important;
++	max-width: var(--mobile-navigation-width) !important;
++	max-height: var(--mobile-navigation-height) !important;
++	transform: none !important;
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-overlay {
++	display: block !important;
++	position: absolute !important;
++	top: 0 !important;
++	left: 0 !important;
++	width: 100% !important;
++	height: 100% !important;
++	box-shadow: 0 0 16px var(--vscode-widget-shadow);
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-overlay--sidebar {
++	background: var(--vscode-sideBar-background);
++	border-right: 1px solid var(--vscode-sideBar-border);
 +}
 +
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/style.ts
@@ -649,3 +742,308 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/viewportPolic
 +		assert.strictEqual(policy.viewportClass.get(), 'desktop', 'clearing restores geometry classification');
 +	});
 +});
+Index: code-server-mobile/lib/vscode/src/vs/sessions/browser/workbench.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/sessions/browser/workbench.ts
++++ code-server-mobile/lib/vscode/src/vs/sessions/browser/workbench.ts
+@@ -1967,6 +1967,18 @@ export class Workbench extends Disposabl
+ 		}
+ 	}
+ 
++	tryShowMobileNavigationOverlay(_part: Parts): boolean {
++		return false;
++	}
++
++	closeMobileNavigationOverlay(_part?: Parts): boolean {
++		return false;
++	}
++
++	isMobileNavigationOverlay(_part: Parts): boolean {
++		return false;
++	}
++
+ 	setPartHidden(hidden: boolean, part: Parts): void {
+ 		switch (part) {
+ 			case Parts.SIDEBAR_PART:
+Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
+===================================================================
+--- /dev/null
++++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
+@@ -0,0 +1,200 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { addDisposableListener, EventType } from '../../base/browser/dom.js';
++import { Gesture, EventType as GestureEventType } from '../../base/browser/touch.js';
++import { mainWindow } from '../../base/browser/window.js';
++import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
++import { Part } from './part.js';
++import { Parts } from '../services/layout/browser/layoutService.js';
++
++const OVERLAY_HOST_CLASS = 'mobile-navigation-overlay-host';
++const OVERLAY_CLASS = 'mobile-navigation-overlay';
++const BACKDROP_CLASS = 'mobile-navigation-backdrop';
++const HISTORY_STATE_KEY = 'vscodeMobileNavigation';
++
++/** Presents existing workbench parts above the editor without changing grid visibility. */
++export class MobileNavigationOverlayController extends Disposable {
++
++	private readonly backdrop: HTMLElement;
++	private readonly backdropDisposables = this._register(new DisposableStore());
++	private activePart: Parts | undefined;
++	private activeHost: HTMLElement | undefined;
++	private previouslyFocusedElement: HTMLElement | undefined;
++	private pendingHistoryBack = false;
++	private historyId = 0;
++
++	constructor(
++		private readonly container: HTMLElement,
++		private readonly getPart: (part: Parts) => Part,
++		private readonly getOverlayBounds: () => DOMRect
++	) {
++		super();
++		this.backdrop = this.createBackdrop();
++		this.registerListeners();
++	}
++
++	show(part: Parts): boolean {
++		if (!isSupportedPart(part)) {
++			return false;
++		}
++
++		if (this.activePart === part) {
++			this.layout();
++			return true;
++		}
++
++		this.closeActiveOverlay(false);
++		const target = this.getPart(part);
++		const element = target.getContainer();
++		const host = element?.closest<HTMLElement>('.split-view-view');
++		if (!element || !host) {
++			return false;
++		}
++
++		this.previouslyFocusedElement = mainWindow.document.activeElement instanceof HTMLElement ? mainWindow.document.activeElement : undefined;
++		this.activePart = part;
++		this.activeHost = host;
++		this.applyOverlayClasses(element, host, part);
++		this.container.append(this.backdrop);
++		this.pushHistoryState(part);
++		this.layout();
++		return true;
++	}
++
++	close(part?: Parts): boolean {
++		if (!this.activePart || part && this.activePart !== part) {
++			return false;
++		}
++
++		this.closeActiveOverlay(true);
++		return true;
++	}
++
++	isActive(part: Parts): boolean {
++		return this.activePart === part;
++	}
++
++	layout(): void {
++		if (!this.activePart || !this.activeHost) {
++			return;
++		}
++
++		const bounds = this.getOverlayBounds();
++		const width = getOverlayWidth(this.activePart, bounds.width);
++		this.setOverlayGeometry(this.activeHost, bounds, width);
++		this.getPart(this.activePart).layout(width, bounds.height, bounds.top, bounds.left);
++	}
++
++	private createBackdrop(): HTMLElement {
++		const backdrop = document.createElement('div');
++		backdrop.classList.add(BACKDROP_CLASS);
++		backdrop.setAttribute('aria-hidden', 'true');
++		return backdrop;
++	}
++
++	private registerListeners(): void {
++		this.backdropDisposables.add(Gesture.addTarget(this.backdrop));
++		this.backdropDisposables.add(addDisposableListener(this.backdrop, GestureEventType.Tap, () => this.close()));
++		this.backdropDisposables.add(addDisposableListener(this.backdrop, EventType.CLICK, () => this.close()));
++		this._register(addDisposableListener(mainWindow, EventType.KEY_DOWN, event => this.onKeyDown(event)));
++		this._register(addDisposableListener(mainWindow, 'popstate', () => this.onPopState()));
++	}
++
++	private onKeyDown(event: KeyboardEvent): void {
++		if (event.key !== 'Escape' || event.defaultPrevented || !this.activePart) {
++			return;
++		}
++
++		event.preventDefault();
++		this.close();
++	}
++
++	private onPopState(): void {
++		if (this.pendingHistoryBack) {
++			this.pendingHistoryBack = false;
++			return;
++		}
++
++		this.closeActiveOverlay(false);
++	}
++
++	private applyOverlayClasses(element: HTMLElement, host: HTMLElement, part: Parts): void {
++		host.classList.add(OVERLAY_HOST_CLASS);
++		element.classList.add(OVERLAY_CLASS, getPartClass(part));
++		element.setAttribute('aria-modal', 'true');
++		element.setAttribute('role', 'dialog');
++	}
++
++	private setOverlayGeometry(host: HTMLElement, bounds: DOMRect, width: number): void {
++		host.style.setProperty('--mobile-navigation-left', `${bounds.left}px`);
++		host.style.setProperty('--mobile-navigation-top', `${bounds.top}px`);
++		host.style.setProperty('--mobile-navigation-width', `${width}px`);
++		host.style.setProperty('--mobile-navigation-height', `${bounds.height}px`);
++		this.backdrop.style.setProperty('--mobile-navigation-left', `${bounds.left}px`);
++		this.backdrop.style.setProperty('--mobile-navigation-top', `${bounds.top}px`);
++		this.backdrop.style.setProperty('--mobile-navigation-width', `${bounds.width}px`);
++		this.backdrop.style.setProperty('--mobile-navigation-height', `${bounds.height}px`);
++	}
++
++	private closeActiveOverlay(updateHistory: boolean): void {
++		if (!this.activePart || !this.activeHost) {
++			return;
++		}
++
++		const element = this.getPart(this.activePart).getContainer();
++		this.removeOverlayClasses(element, this.activeHost, this.activePart);
++		this.activePart = undefined;
++		this.activeHost = undefined;
++		this.backdrop.remove();
++		this.restoreFocus();
++		if (updateHistory) {
++			this.pendingHistoryBack = true;
++			mainWindow.history.back();
++		}
++	}
++
++	private removeOverlayClasses(element: HTMLElement | undefined, host: HTMLElement, part: Parts): void {
++		host.classList.remove(OVERLAY_HOST_CLASS);
++		host.style.removeProperty('--mobile-navigation-left');
++		host.style.removeProperty('--mobile-navigation-top');
++		host.style.removeProperty('--mobile-navigation-width');
++		host.style.removeProperty('--mobile-navigation-height');
++		element?.classList.remove(OVERLAY_CLASS, getPartClass(part));
++		element?.removeAttribute('aria-modal');
++		element?.setAttribute('role', 'none');
++	}
++
++	private restoreFocus(): void {
++		if (!this.previouslyFocusedElement?.isConnected) {
++			this.previouslyFocusedElement = undefined;
++			return;
++		}
++
++		this.previouslyFocusedElement.focus();
++		this.previouslyFocusedElement = undefined;
++	}
++
++	private pushHistoryState(part: Parts): void {
++		this.historyId++;
++		mainWindow.history.pushState({ [HISTORY_STATE_KEY]: this.historyId, part }, '');
++	}
++}
++
++function isSupportedPart(part: Parts): boolean {
++	return part === Parts.SIDEBAR_PART || part === Parts.PANEL_PART;
++}
++
++function getPartClass(part: Parts): string {
++	return part === Parts.SIDEBAR_PART ? 'mobile-navigation-overlay--sidebar' : 'mobile-navigation-overlay--panel';
++}
++
++function getOverlayWidth(part: Parts, availableWidth: number): number {
++	if (part === Parts.PANEL_PART) {
++		return availableWidth;
++	}
++
++	return Math.min(360, Math.floor(availableWidth * 0.9));
++}
+Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
++++ code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
+@@ -580,7 +580,9 @@ export abstract class AbstractPaneCompos
+ 	}
+ 
+ 	hideActivePaneComposite(): void {
+-		if (this.layoutService.isVisible(this.partId)) {
++		if (this.layoutService.isMobileNavigationOverlay(this.partId)) {
++			this.layoutService.closeMobileNavigationOverlay(this.partId);
++		} else if (this.layoutService.isVisible(this.partId)) {
+ 			this.layoutService.setPartHidden(true, this.partId);
+ 		}
+ 
+@@ -592,7 +594,7 @@ export abstract class AbstractPaneCompos
+ 	}
+ 
+ 	override layout(width: number, height: number, top: number, left: number): void {
+-		if (!this.layoutService.isVisible(this.partId)) {
++		if (!this.layoutService.isVisible(this.partId) && !this.layoutService.isMobileNavigationOverlay(this.partId)) {
+ 			return;
+ 		}
+ 
+Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/sidebar/sidebarPart.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/parts/sidebar/sidebarPart.ts
++++ code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/sidebar/sidebarPart.ts
+@@ -179,7 +179,7 @@ export class SidebarPart extends Abstrac
+ 	}
+ 
+ 	override layout(width: number, height: number, top: number, left: number): void {
+-		if (!this.layoutService.isVisible(Parts.SIDEBAR_PART)) {
++		if (!this.layoutService.isVisible(Parts.SIDEBAR_PART) && !this.layoutService.isMobileNavigationOverlay(Parts.SIDEBAR_PART)) {
+ 			return;
+ 		}
+ 
+Index: code-server-mobile/lib/vscode/src/vs/workbench/services/layout/browser/layoutService.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/services/layout/browser/layoutService.ts
++++ code-server-mobile/lib/vscode/src/vs/workbench/services/layout/browser/layoutService.ts
+@@ -413,6 +413,21 @@ export interface IWorkbenchLayoutService
+ 	isVisible(part: Parts, targetWindow: Window): boolean;
+ 
+ 	/**
++	 * Presents a compact navigation part without changing grid visibility.
++	 */
++	tryShowMobileNavigationOverlay(part: Parts): boolean;
++
++	/**
++	 * Closes the active compact navigation part, optionally matching a part.
++	 */
++	closeMobileNavigationOverlay(part?: Parts): boolean;
++
++	/**
++	 * Returns whether a part is presented as compact navigation.
++	 */
++	isMobileNavigationOverlay(part: Parts): boolean;
++
++	/**
+ 	 * Set part hidden or not in the target window.
+ 	 */
+ 	setPartHidden(hidden: boolean, part: Parts): void;
+Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/workbenchTestServices.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/test/browser/workbenchTestServices.ts
++++ code-server-mobile/lib/vscode/src/vs/workbench/test/browser/workbenchTestServices.ts
+@@ -674,6 +674,9 @@ export class TestLayoutService implement
+ 	async setEditorHidden(_hidden: boolean): Promise<void> { }
+ 	async setSideBarHidden(_hidden: boolean): Promise<void> { }
+ 	async setAuxiliaryBarHidden(_hidden: boolean): Promise<void> { }
++	tryShowMobileNavigationOverlay(_part: Parts): boolean { return false; }
++	closeMobileNavigationOverlay(_part?: Parts): boolean { return false; }
++	isMobileNavigationOverlay(_part: Parts): boolean { return false; }
+ 	async setPartHidden(_hidden: boolean, part: Parts): Promise<void> { }
+ 	isSecondarySideBarVisible(): boolean { return false; }
+ 	toggleSecondarySideBar(): void { }
