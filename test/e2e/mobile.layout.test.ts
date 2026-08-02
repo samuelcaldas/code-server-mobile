@@ -69,8 +69,15 @@ describe("mobile layout persistence", ["--disable-workspace-trust"], {}, () => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await expect(workbench).not.toHaveClass(/phone-layout/)
 
-    await codeServerPage.executeCommandViaMenus("View: Toggle Primary Side Bar Visibility")
-    await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+    if (await sidebar.isVisible()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Primary Side Bar Visibility")
+    }
+    if (await panel.isHidden()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+    }
+    if (await page.locator("#workbench\\.parts\\.editor").isHidden()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+    }
 
     await expect(sidebar).toBeHidden()
     await expect(panel).toBeVisible()
@@ -89,15 +96,24 @@ describe("mobile layout persistence", ["--disable-workspace-trust"], {}, () => {
     await expect(sidebar).toBeHidden()
     await expect(panel).toBeVisible()
   })
+})
 
+describe("mobile layout maximized panel startup", ["--disable-workspace-trust"], {}, () => {
   test("should show the editor when compact startup follows a maximized panel", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const workbenchUrl = page.url()
 
+    const desktopEditor = page.locator("#workbench\\.parts\\.editor")
+    const desktopPanel = page.locator(".part.panel")
     await page.setViewportSize({ width: 1280, height: 800 })
-    await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+    if (await desktopPanel.isHidden()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+    }
+    if (await desktopEditor.isHidden()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+    }
     await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
-    await expect(page.locator("#workbench\\.parts\\.editor")).toBeHidden()
+    await expect(desktopEditor).toBeHidden()
 
     await codeServerPage.stateFlush()
     await page.goto("about:blank")
@@ -105,8 +121,81 @@ describe("mobile layout persistence", ["--disable-workspace-trust"], {}, () => {
     await page.goto(workbenchUrl)
     await codeServerPage.reloadUntilEditorIsReady()
 
-    await expect(page.locator("div.monaco-workbench")).toHaveClass(/phone-layout/)
-    await expect(page.locator("#workbench\\.parts\\.editor")).toBeVisible()
-    await expect(page.locator(".part.panel")).toBeHidden()
+    const workbench = page.locator("div.monaco-workbench")
+    const editor = page.locator("#workbench\\.parts\\.editor")
+    const panel = page.locator(".part.panel")
+    await expect(workbench).toHaveClass(/phone-layout/)
+    await expect(editor).toBeVisible()
+    await expect(panel).toBeHidden()
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(workbench).not.toHaveClass(/phone-layout/)
+    await expect(editor).toBeHidden()
+    await expect(panel).toBeVisible()
+  })
+})
+
+describe("mobile layout hidden maximized panel", ["--disable-workspace-trust"], {}, () => {
+  test("should preserve the panel remember-last maximized state", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const editor = page.locator("#workbench\\.parts\\.editor")
+    const panel = page.locator(".part.panel")
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    if (await panel.isHidden()) {
+      await page.keyboard.press("ControlOrMeta+J")
+    }
+    if (await editor.isHidden()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+    }
+    await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+    await expect(editor).toBeHidden()
+    await page.keyboard.press("ControlOrMeta+J")
+    await expect(panel).toBeHidden()
+    await expect(editor).toBeVisible()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.keyboard.press("ControlOrMeta+J")
+
+    await expect(editor).toBeHidden()
+    await expect(panel).toBeVisible()
+  })
+})
+
+describe("mobile layout maximized auxiliary bar", ["--disable-workspace-trust"], {}, () => {
+  test("should keep phone parts hidden and restore auxiliary state", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const workbench = page.locator("div.monaco-workbench")
+    const editor = page.locator("#workbench\\.parts\\.editor")
+    const sidebar = page.locator(".part.sidebar")
+    const panel = page.locator(".part.panel")
+    const auxiliaryBar = page.locator(".part.auxiliarybar")
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    if (await auxiliaryBar.isHidden()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Secondary Side Bar Visibility")
+    }
+    if (await panel.isVisible()) {
+      await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+    }
+    await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Secondary Side Bar")
+    await expect(editor).toBeHidden()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(workbench).toHaveClass(/phone-layout/)
+    await expect(editor).toBeVisible()
+    await expect(sidebar).toBeHidden()
+    await expect(panel).toBeHidden()
+    await expect(auxiliaryBar).toBeHidden()
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(editor).toBeHidden()
+    await expect(auxiliaryBar).toBeVisible()
+
+    await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Secondary Side Bar")
+    await expect(editor).toBeVisible()
+    await expect(sidebar).toBeVisible()
+    await expect(panel).toBeHidden()
   })
 })

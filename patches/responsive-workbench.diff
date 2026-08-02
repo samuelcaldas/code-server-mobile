@@ -7,18 +7,19 @@ bar all compete for one small viewport, which is the actual cause of the
 workbench being unusable there.
 
 This adds `WorkbenchViewportPolicy`, a dependency-free policy object that
-classifies the container width as `phone`, `tablet`, or `desktop` and exposes
+classifies container geometry as `phone`, `tablet`, or `desktop` and exposes
 that as observables. `Layout#layout()` feeds it the current main container
-width on every pass and toggles a `phone-layout` class on the containers, so
-the classification tracks rotation, window resize, and a Samsung DeX plug or
-unplug live — no reload, no editor state loss, and no user-agent sniffing.
+width and height on every pass and toggles a `phone-layout` class on the main
+container, so classification tracks rotation, window resize, and a Samsung
+DeX plug or unplug live — no reload and no user-agent sniffing.
 
-Classification is width-only on purpose. Code's own phone layout in
+Classification uses geometry on purpose. Code's own phone layout in
 `vs/sessions` gates on the `isMobile` user-agent flag, which is wrong in both
-directions for code-server: it denies a narrow desktop browser a usable
+directions for code-server: it denies a constrained desktop browser a usable
 layout, and Samsung DeX keeps the Android `Mobi` user agent even on an
-external display. `setOverride` exists so a user-facing setting can pin the
-class later.
+external display. A short landscape viewport remains compact while a wide
+external display becomes desktop. `setOverride` exists so a user-facing
+setting can pin the class later.
 
 `phoneLayout.css` carries the compact rules, every one of them scoped to
 `.monaco-workbench.phone-layout`, so desktop rendering is unchanged by
@@ -37,17 +38,31 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  import { isWindows, isLinux, isMacintosh, isWeb, isIOS } from '../../base/common/platform.js';
  import { EditorInputCapabilities, GroupIdentifier, isResourceEditorInput, IUntypedEditorInput, pathsToEditors } from '../common/editor.js';
  import { SidebarPart } from './parts/sidebar/sidebarPart.js';
-@@ -223,6 +224,9 @@ export abstract class Layout extends Dis
+@@ -149,6 +150,13 @@ export const TITLE_BAR_SETTINGS = [
+ const DEFAULT_EMPTY_WINDOW_DIMENSIONS = new Dimension(DEFAULT_EMPTY_WINDOW_SIZE.width, DEFAULT_EMPTY_WINDOW_SIZE.height);
+ const DEFAULT_WORKSPACE_WINDOW_DIMENSIONS = new Dimension(DEFAULT_WORKSPACE_WINDOW_SIZE.width, DEFAULT_WORKSPACE_WINDOW_SIZE.height);
+ 
++interface IDesktopLayoutState {
++	readonly partVisibility: IPartVisibilityDefaults;
++	readonly editorVisible: boolean;
++	readonly panelMaximized: boolean;
++	readonly auxiliaryBarMaximized: boolean;
++}
++
+ export abstract class Layout extends Disposable implements IWorkbenchLayoutService {
+ 
+ 	declare readonly _serviceBrand: undefined;
+@@ -223,6 +231,9 @@ export abstract class Layout extends Dis
  		return this.containerStylesLoaded.get(window.vscodeWindowId);
  	}
  
 +	private readonly viewportPolicy = this._register(new WorkbenchViewportPolicy());
-+	private desktopPartVisibility: IPartVisibilityDefaults | undefined;
++	private desktopLayoutState: IDesktopLayoutState | undefined;
 +
  	private _mainContainerDimension!: IDimension;
  	get mainContainerDimension(): IDimension { return this._mainContainerDimension; }
  
-@@ -727,6 +731,7 @@ export abstract class Layout extends Dis
+@@ -727,6 +738,7 @@ export abstract class Layout extends Dis
  			mainContainerDimension: this._mainContainerDimension,
  			resetLayout: Boolean(this.layoutOptions?.resetLayout)
  		});
@@ -55,36 +70,39 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  
  		this._register(this.stateModel.onDidChangeState(change => {
  			if (change.key === LayoutStateKeys.ACTIVITYBAR_HIDDEN) {
-@@ -840,6 +845,19 @@ export abstract class Layout extends Dis
+@@ -840,6 +852,22 @@ export abstract class Layout extends Dis
  		this.updateWindowBorder(true);
  	}
  
 +	private initializePhoneLayoutState(): void {
-+		this.viewportPolicy.update(this._mainContainerDimension.width);
++		this.viewportPolicy.update(this._mainContainerDimension.width, this._mainContainerDimension.height);
 +		if (!this.viewportPolicy.isPhoneLayout.get()) {
 +			return;
 +		}
 +
-+		this.desktopPartVisibility = this.getPartVisibility();
++		this.desktopLayoutState = this.getDesktopLayoutState();
 +		const visibilityDefaults = this.viewportPolicy.getPartVisibilityDefaults();
 +		this.stateModel.setRuntimeValue(LayoutStateKeys.SIDEBAR_HIDDEN, !visibilityDefaults.sidebar);
 +		this.stateModel.setRuntimeValue(LayoutStateKeys.PANEL_HIDDEN, !visibilityDefaults.panel);
 +		this.stateModel.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, !visibilityDefaults.auxiliaryBar);
++		this.stateModel.setRuntimeValue(LayoutStateKeys.EDITOR_HIDDEN, false);
++		this.stateModel.setRuntimeValue(LayoutStateKeys.PANEL_WAS_LAST_MAXIMIZED, false);
++		this.stateModel.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_WAS_LAST_MAXIMIZED, false);
 +	}
 +
  	private getDefaultLayoutViews(environmentService: IBrowserWorkbenchEnvironmentService, storageService: IStorageService): string[] | undefined {
  		const defaultLayout = environmentService.options?.defaultLayout;
  		if (!defaultLayout) {
-@@ -1721,7 +1739,7 @@ export abstract class Layout extends Dis
+@@ -1721,7 +1749,7 @@ export abstract class Layout extends Dis
  				: this.workbenchGrid.getViewSize(this.auxiliaryBarPartView).width;
  			this.stateModel.setInitializationValue(LayoutStateKeys.AUXILIARYBAR_SIZE, auxiliaryBarSize as number);
  
 -			this.stateModel.save(true, true);
-+			this.stateModel.save(true, true, this.desktopPartVisibility);
++			this.stateModel.save(true, true, this.desktopLayoutState);
  		}));
  
  		this._register(Event.any(this.paneCompositeService.onDidPaneCompositeOpen, this.paneCompositeService.onDidPaneCompositeClose)(() => {
-@@ -1741,6 +1759,8 @@ export abstract class Layout extends Dis
+@@ -1741,6 +1769,8 @@ export abstract class Layout extends Dis
  
  			this.logService.trace(`Layout#layout, height: ${this._mainContainerDimension.height}, width: ${this._mainContainerDimension.width}`);
  
@@ -93,13 +111,13 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			size(this.mainContainer, this._mainContainerDimension.width, this._mainContainerDimension.height);
  
  			// Layout the grid widget
-@@ -1752,6 +1772,60 @@ export abstract class Layout extends Dis
+@@ -1752,6 +1782,86 @@ export abstract class Layout extends Dis
  		}
  	}
  
 +	/**
-+	 * Re-classifies the viewport for the current container width and reflects
-+	 * the result on the container so stylesheets can key compact rules off it.
++	 * Re-classifies the current container geometry and reflects the result on
++	 * the container so stylesheets can key compact rules off it.
 +	 *
 +	 * Runs on every layout pass, which is what makes the transition live: a
 +	 * Samsung DeX plug or unplug, a rotation, or a window resize all arrive
@@ -107,7 +125,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +	 * without disturbing editor state.
 +	 */
 +	private updateViewportClass(): void {
-+		const changed = this.viewportPolicy.update(this._mainContainerDimension.width);
++		const changed = this.viewportPolicy.update(this._mainContainerDimension.width, this._mainContainerDimension.height);
 +		if (!changed) {
 +			return;
 +		}
@@ -123,8 +141,27 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +	}
 +
 +	private enterPhoneLayout(): void {
-+		this.desktopPartVisibility = this.getPartVisibility();
++		this.desktopLayoutState = this.getDesktopLayoutState();
++		this.restoreEditorBeforePhoneLayout();
 +		this.applyPartVisibility(this.viewportPolicy.getPartVisibilityDefaults());
++	}
++
++	private restoreEditorBeforePhoneLayout(): void {
++		this.setAuxiliaryBarMaximized(false);
++		if (!this.isPanelMaximized()) {
++			return;
++		}
++
++		this.toggleMaximizedPanel();
++	}
++
++	private getDesktopLayoutState(): IDesktopLayoutState {
++		return {
++			partVisibility: this.getPartVisibility(),
++			editorVisible: this.isVisible(Parts.EDITOR_PART),
++			panelMaximized: this.stateModel.getRuntimeValue(LayoutStateKeys.PANEL_WAS_LAST_MAXIMIZED),
++			auxiliaryBarMaximized: this.isAuxiliaryBarMaximized()
++		};
 +	}
 +
 +	private getPartVisibility(): IPartVisibilityDefaults {
@@ -136,13 +173,20 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +	}
 +
 +	private exitPhoneLayout(): void {
-+		const desktopPartVisibility = this.desktopPartVisibility;
-+		if (!desktopPartVisibility) {
++		const desktopLayoutState = this.desktopLayoutState;
++		if (!desktopLayoutState) {
 +			return;
 +		}
 +
-+		this.applyPartVisibility(desktopPartVisibility);
-+		this.desktopPartVisibility = undefined;
++		this.applyPartVisibility(desktopLayoutState.partVisibility);
++		this.restoreDesktopMaximizedState(desktopLayoutState);
++		this.desktopLayoutState = undefined;
++	}
++
++	private restoreDesktopMaximizedState(desktopLayoutState: IDesktopLayoutState): void {
++		this.stateModel.setRuntimeValue(LayoutStateKeys.PANEL_WAS_LAST_MAXIMIZED, desktopLayoutState.panelMaximized);
++		this.stateModel.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_WAS_LAST_MAXIMIZED, desktopLayoutState.auxiliaryBarMaximized);
++		this.setEditorHidden(!desktopLayoutState.editorVisible);
 +	}
 +
 +	private applyPartVisibility(visibility: IPartVisibilityDefaults): void {
@@ -154,7 +198,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	isMainEditorLayoutCentered(): boolean {
  		return this.stateModel.getRuntimeValue(LayoutStateKeys.MAIN_EDITOR_CENTERED);
  	}
-@@ -1906,6 +1980,7 @@ export abstract class Layout extends Dis
+@@ -1906,6 +2016,7 @@ export abstract class Layout extends Dis
  
  	getLayoutClasses(): string[] {
  		return coalesce([
@@ -162,12 +206,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			!this.isVisible(Parts.SIDEBAR_PART) ? LayoutClasses.SIDEBAR_HIDDEN : undefined,
  			!this.isVisible(Parts.EDITOR_PART, mainWindow) ? LayoutClasses.MAIN_EDITOR_AREA_HIDDEN : undefined,
  			!this.isVisible(Parts.PANEL_PART) ? LayoutClasses.PANEL_HIDDEN : undefined,
-@@ -3120,22 +3195,43 @@ class LayoutStateModel extends Disposabl
+@@ -3120,22 +3231,50 @@ class LayoutStateModel extends Disposabl
  		this.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, value);
  	}
  
 -	save(workspace: boolean, global: boolean): void {
-+	save(workspace: boolean, global: boolean, desktopPartVisibility?: IPartVisibilityDefaults): void {
++	save(workspace: boolean, global: boolean, desktopLayoutState?: IDesktopLayoutState): void {
  		let key: keyof typeof LayoutStateKeys;
 -
  		const isZenMode = this.getRuntimeValue(LayoutStateKeys.ZEN_MODE_ACTIVE);
@@ -181,42 +225,49 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 -				}
 -
 -				this.saveKeyToStorage(stateKey);
-+			if (!this.shouldSaveStateKey(stateKey, workspace, global, isZenMode) || (desktopPartVisibility && this.isDesktopPartVisibilityKey(stateKey))) {
++			if (!this.shouldSaveStateKey(stateKey, workspace, global, isZenMode) || (desktopLayoutState && this.isDesktopLayoutStateKey(stateKey))) {
 +				continue;
  			}
 +
 +			this.saveKeyToStorage(stateKey);
- 		}
++		}
 +
-+		this.saveDesktopPartVisibility(workspace, desktopPartVisibility);
++		this.saveDesktopLayoutState(workspace, desktopLayoutState);
 +	}
 +
 +	private shouldSaveStateKey(stateKey: WorkbenchLayoutStateKey<StorageKeyType>, workspace: boolean, global: boolean, isZenMode: boolean): boolean {
 +		if (!((workspace && stateKey.scope === StorageScope.WORKSPACE) || (global && stateKey.scope === StorageScope.PROFILE))) {
 +			return false;
-+		}
+ 		}
 +
 +		return !isZenMode || !(stateKey instanceof RuntimeStateKey && stateKey.zenModeIgnore);
 +	}
 +
-+	private isDesktopPartVisibilityKey(stateKey: WorkbenchLayoutStateKey<StorageKeyType>): boolean {
++	private isDesktopLayoutStateKey(stateKey: WorkbenchLayoutStateKey<StorageKeyType>): boolean {
 +		return stateKey === LayoutStateKeys.SIDEBAR_HIDDEN ||
++			stateKey === LayoutStateKeys.EDITOR_HIDDEN ||
 +			stateKey === LayoutStateKeys.PANEL_HIDDEN ||
-+			stateKey === LayoutStateKeys.AUXILIARYBAR_HIDDEN;
++			stateKey === LayoutStateKeys.PANEL_WAS_LAST_MAXIMIZED ||
++			stateKey === LayoutStateKeys.AUXILIARYBAR_HIDDEN ||
++			stateKey === LayoutStateKeys.AUXILIARYBAR_WAS_LAST_MAXIMIZED;
 +	}
 +
-+	private saveDesktopPartVisibility(workspace: boolean, desktopPartVisibility?: IPartVisibilityDefaults): void {
-+		if (!workspace || !desktopPartVisibility) {
++	private saveDesktopLayoutState(workspace: boolean, desktopLayoutState?: IDesktopLayoutState): void {
++		if (!workspace || !desktopLayoutState) {
 +			return;
 +		}
 +
-+		this.saveKeyToStorage(LayoutStateKeys.SIDEBAR_HIDDEN, !desktopPartVisibility.sidebar);
-+		this.saveKeyToStorage(LayoutStateKeys.PANEL_HIDDEN, !desktopPartVisibility.panel);
-+		this.saveKeyToStorage(LayoutStateKeys.AUXILIARYBAR_HIDDEN, !desktopPartVisibility.auxiliaryBar);
++		const visibility = desktopLayoutState.partVisibility;
++		this.saveKeyToStorage(LayoutStateKeys.SIDEBAR_HIDDEN, !visibility.sidebar);
++		this.saveKeyToStorage(LayoutStateKeys.EDITOR_HIDDEN, !desktopLayoutState.editorVisible);
++		this.saveKeyToStorage(LayoutStateKeys.PANEL_HIDDEN, !visibility.panel);
++		this.saveKeyToStorage(LayoutStateKeys.PANEL_WAS_LAST_MAXIMIZED, desktopLayoutState.panelMaximized);
++		this.saveKeyToStorage(LayoutStateKeys.AUXILIARYBAR_HIDDEN, !visibility.auxiliaryBar);
++		this.saveKeyToStorage(LayoutStateKeys.AUXILIARYBAR_WAS_LAST_MAXIMIZED, desktopLayoutState.auxiliaryBarMaximized);
  	}
  
  	getInitializationValue<T extends StorageKeyType>(key: InitializationStateKey<T>): T {
-@@ -3195,9 +3291,9 @@ class LayoutStateModel extends Disposabl
+@@ -3195,9 +3334,9 @@ class LayoutStateModel extends Disposabl
  		this._onDidChangeState.fire({ key, value });
  	}
  
@@ -233,7 +284,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,87 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -243,8 +294,8 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 + * Compact workbench layout.
 + *
 + * Every rule is scoped to `.monaco-workbench.phone-layout`, which is applied
-+ * by `Layout#updateViewportClass` only while the container is narrower than
-+ * the phone breakpoint. Rendering above that breakpoint is therefore untouched.
++ * by `Layout#updateViewportClass` only while the container geometry needs the
++ * single-pane phone topology. Other viewport classes remain untouched.
 + *
 + * Rule shape follows `vs/sessions/browser/media/phoneLayout.css`, which is the
 + * production phone layout for the Agent Sessions workbench.
@@ -321,16 +372,6 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +	min-height: 44px;
 +}
 +
-+/* ---- Phone Layout: Workbench Parts ---- */
-+
-+/*
-+ * The sidebar is an overlay in compact mode rather than a permanent split, so
-+ * it can use the full width without squeezing the editor to nothing.
-+ */
-+.monaco-workbench.phone-layout .part.sidebar {
-+	max-width: 100vw;
-+	z-index: 20;
-+}
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/style.ts
 ===================================================================
 --- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/style.ts
@@ -347,7 +388,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,123 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -356,7 +397,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 +import { Disposable } from '../../base/common/lifecycle.js';
 +import { derived, IObservable, observableValue } from '../../base/common/observable.js';
 +
-+/** Viewport classification based on container width. */
++/** Viewport classification based on container geometry. */
 +export type ViewportClass = 'phone' | 'tablet' | 'desktop';
 +
 +/** Default visibility for each workbench part. */
@@ -374,19 +415,21 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 +export const PHONE_LAYOUT_CLASS = 'phone-layout';
 +
 +const PHONE_MAX_WIDTH = 640;
++const PHONE_LANDSCAPE_MAX_WIDTH = 960;
++const PHONE_LANDSCAPE_MAX_HEIGHT = 480;
 +const TABLET_MAX_WIDTH = 1024;
 +
 +/**
 + * Viewport classification for the workbench.
 + *
-+ * Classification is driven purely by container width, deliberately without
++ * Classification is driven purely by container geometry, deliberately without
 + * consulting the user agent. code-server runs the workbench in a browser on
-+ * hardware it cannot identify: a phone in a desktop-class browser, a narrow
++ * hardware it cannot identify: a phone in portrait or landscape, a narrow
 + * desktop window, and a Samsung DeX session (which keeps the Android user
 + * agent while presenting a large external display) must all resolve from the
-+ * same signal. Width is the only one that is both accurate and observed live,
-+ * so plugging or unplugging DeX, rotating, or resizing re-classifies through
-+ * the ordinary `layout()` pass with no reload.
++ * same live signal. The ordinary `layout()` pass observes that geometry, so
++ * plugging or unplugging DeX, rotating, or resizing re-classifies with no
++ * reload.
 + *
 + * The object is intentionally free of service dependencies so it can be unit
 + * tested directly.
@@ -404,27 +447,31 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 +	});
 +
 +	private _override: ViewportClass | undefined;
++	private _lastWidth = 0;
++	private _lastHeight = 0;
 +
 +	/**
-+	 * Pins the classification, ignoring width. Pass `undefined` to restore
-+	 * automatic classification. Used by the user-facing override setting.
++	 * Pins the classification, ignoring geometry. Pass `undefined` to restore
++	 * automatic classification. Reserved for a future user-facing override.
 +	 */
 +	setOverride(viewportClass: ViewportClass | undefined): void {
 +		this._override = viewportClass;
-+		this.update(this._lastWidth);
++		this.update(this._lastWidth, this._lastHeight);
 +	}
 +
-+	private _lastWidth = 0;
-+
 +	/**
-+	 * Re-classify for the given container width. Call from the workbench
++	 * Re-classify for the given container geometry. Call from the workbench
 +	 * `layout()` pass. Returns `true` when the classification changed.
 +	 */
-+	update(width: number): boolean {
-+		this._lastWidth = width;
++	update(width: number, height: number): boolean {
++		const validGeometry = hasValidGeometry(width, height);
++		if (validGeometry) {
++			this._lastWidth = width;
++			this._lastHeight = height;
++		}
 +
-+		const next = this._override ?? classifyViewport(width);
-+		if (this._viewportClass.get() === next) {
++		const next = this._override ?? (validGeometry ? classifyViewport(width, height) : undefined);
++		if (!next || this._viewportClass.get() === next) {
 +			return false;
 +		}
 +
@@ -436,8 +483,8 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 +	getPartVisibilityDefaults(viewportClass?: ViewportClass): IPartVisibilityDefaults {
 +		const current = viewportClass ?? this._viewportClass.get();
 +		if (current === 'phone') {
-+			// Compact mode gives the whole viewport to the editor; the sidebar
-+			// and panel are reachable as overlays rather than permanent splits.
++			// Compact mode gives the whole viewport to the editor. Navigation can
++			// present transient surfaces without persisting them as desktop splits.
 +			return { sidebar: false, auxiliaryBar: false, panel: false };
 +		}
 +
@@ -445,11 +492,13 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 +	}
 +}
 +
-+/**
-+ * Classifies a container width into a viewport class.
-+ */
-+function classifyViewport(width: number): ViewportClass {
++/** Classifies valid container geometry into a viewport class. */
++function classifyViewport(width: number, height: number): ViewportClass {
 +	if (width < PHONE_MAX_WIDTH) {
++		return 'phone';
++	}
++
++	if (width < PHONE_LANDSCAPE_MAX_WIDTH && height < PHONE_LANDSCAPE_MAX_HEIGHT) {
 +		return 'phone';
 +	}
 +
@@ -458,6 +507,10 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
 +	}
 +
 +	return 'desktop';
++}
++
++function hasValidGeometry(width: number, height: number): boolean {
++	return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
 +}
 Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/viewportPolicy.test.ts
 ===================================================================
