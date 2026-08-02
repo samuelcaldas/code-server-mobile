@@ -103,7 +103,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +			this.mainContainer,
 +			part => this.getPart(part),
 +			() => editorPart.getContainer()?.getBoundingClientRect() ?? this.mainContainer.getBoundingClientRect(),
-+			updateHistory => this.closeMobileNavigationOverlay(undefined, updateHistory)
++			updateHistory => this.closeMobileNavigationOverlay(undefined, true, updateHistory)
 +		));
  
  		for (const part of [titleBar, editorPart, activityBar, panelPart, sideBar, statusBar, auxiliaryBarPart, bannerPart]) {
@@ -243,9 +243,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +		return this.mobileNavigationOverlay?.show(part) ?? false;
 +	}
 +
-+	closeMobileNavigationOverlay(part?: Parts, updateHistory = true): boolean {
++	closeMobileNavigationOverlay(part?: Parts, shouldRestoreFocus = true, updateHistory = true): boolean {
 +		const overlayPart = part ?? this.getActiveMobileNavigationPart();
-+		if (!overlayPart || !this.mobileNavigationOverlay?.close(overlayPart, updateHistory)) {
++		if (!overlayPart || !this.mobileNavigationOverlay?.close(overlayPart, updateHistory, shouldRestoreFocus)) {
 +			return false;
 +		}
 +
@@ -802,7 +802,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,265 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -889,12 +889,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		return true;
 +	}
 +
-+	close(part?: Parts, updateHistory = true): boolean {
++	close(part?: Parts, updateHistory = true, shouldRestoreFocus = true): boolean {
 +		if (!this.activePart || part && this.activePart !== part) {
 +			return false;
 +		}
 +
-+		this.closeActiveOverlay(updateHistory);
++		this.closeActiveOverlay(updateHistory, shouldRestoreFocus);
 +		return true;
 +	}
 +
@@ -969,17 +969,21 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		this.backdrop.style.setProperty('--mobile-navigation-height', `${bounds.height}px`);
 +	}
 +
-+	private closeActiveOverlay(updateHistory: boolean): void {
++	private closeActiveOverlay(updateHistory: boolean, shouldRestoreFocus = true): void {
 +		if (!this.activePart || !this.activeHost) {
 +			return;
 +		}
 +
++		const focusRestorationTarget = this.focusRestorationTarget;
++		this.focusRestorationTarget = undefined;
 +		const element = this.getPart(this.activePart).getContainer();
 +		this.removeOverlayClasses(element, this.activeHost, this.activePart);
 +		this.activePart = undefined;
 +		this.activeHost = undefined;
 +		this.backdrop.remove();
-+		this.restoreFocus();
++		if (shouldRestoreFocus) {
++			mainWindow.setTimeout(() => this.restoreFocus(focusRestorationTarget));
++		}
 +		if (updateHistory) {
 +			this.pendingHistoryBack = true;
 +			mainWindow.history.back();
@@ -1008,9 +1012,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		return { element, role, roleIndex };
 +	}
 +
-+	private restoreFocus(): void {
-+		const target = this.focusRestorationTarget;
-+		this.focusRestorationTarget = undefined;
++	private restoreFocus(target: IFocusRestorationTarget | undefined): void {
 +		if (!target) {
 +			return;
 +		}
@@ -1118,7 +1120,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/services/layout/browser/la
 ===================================================================
 --- code-server-mobile.orig/lib/vscode/src/vs/workbench/services/layout/browser/layoutService.ts
 +++ code-server-mobile/lib/vscode/src/vs/workbench/services/layout/browser/layoutService.ts
-@@ -413,6 +413,21 @@ export interface IWorkbenchLayoutService
+@@ -413,6 +413,22 @@ export interface IWorkbenchLayoutService
  	isVisible(part: Parts, targetWindow: Window): boolean;
  
  	/**
@@ -1128,8 +1130,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/services/layout/browser/la
 +
 +	/**
 +	 * Closes the active compact navigation part, optionally matching a part.
++	 * Focus restoration can be skipped when focus moves into newly opened content.
 +	 */
-+	closeMobileNavigationOverlay(part?: Parts): boolean;
++	closeMobileNavigationOverlay(part?: Parts, shouldRestoreFocus?: boolean): boolean;
 +
 +	/**
 +	 * Returns whether a part is presented as compact navigation.
@@ -1193,3 +1196,28 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/compositePar
  
  		// Composites created for the first time
  		let compositeContainer = this.mapCompositeToCompositeContainer.get(composite.getId());
+Index: code-server-mobile/lib/vscode/src/vs/workbench/contrib/files/browser/views/explorerView.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/contrib/files/browser/views/explorerView.ts
++++ code-server-mobile/lib/vscode/src/vs/workbench/contrib/files/browser/views/explorerView.ts
+@@ -11,7 +11,7 @@ import { memoize } from '../../../../../
+ import { IFilesConfiguration, ExplorerFolderContext, FilesExplorerFocusedContext, ExplorerFocusedContext, ExplorerRootContext, ExplorerResourceReadonlyContext, ExplorerResourceCut, ExplorerResourceMoveableToTrash, ExplorerCompressedFocusContext, ExplorerCompressedFirstFocusContext, ExplorerCompressedLastFocusContext, ExplorerResourceAvailableEditorIdsContext, VIEW_ID, ExplorerResourceWritableContext, ViewHasSomeCollapsibleRootItemContext, FoldersViewVisibleContext, ExplorerResourceParentReadOnlyContext, ExplorerFindProviderActive } from '../../common/files.js';
+ import { FileCopiedContext, NEW_FILE_COMMAND_ID, NEW_FOLDER_COMMAND_ID } from '../fileActions.js';
+ import * as DOM from '../../../../../base/browser/dom.js';
+-import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
++import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
+ import { ExplorerDecorationsProvider } from './explorerDecorationsProvider.js';
+ import { IWorkspaceContextService, WorkbenchState } from '../../../../../platform/workspace/common/workspace.js';
+ import { IConfigurationService, IConfigurationChangeEvent } from '../../../../../platform/configuration/common/configuration.js';
+@@ -550,7 +550,10 @@ export class ExplorerView extends ViewPa
+ 				this.telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: 'workbench.files.openFile', from: 'explorer' });
+ 				try {
+ 					this.delegate?.willOpenElement(e.browserEvent);
+-					await this.editorService.openEditor({ resource: element.resource, options: { preserveFocus: e.editorOptions.preserveFocus, pinned: e.editorOptions.pinned, source: EditorOpenSource.USER } }, e.sideBySide ? SIDE_GROUP : ACTIVE_GROUP);
++					const editorPane = await this.editorService.openEditor({ resource: element.resource, options: { preserveFocus: e.editorOptions.preserveFocus, pinned: e.editorOptions.pinned, source: EditorOpenSource.USER } }, e.sideBySide ? SIDE_GROUP : ACTIVE_GROUP);
++					if (this.layoutService.closeMobileNavigationOverlay(Parts.SIDEBAR_PART, false)) {
++						editorPane?.focus();
++					}
+ 				} finally {
+ 					this.delegate?.didOpenElement();
+ 				}
