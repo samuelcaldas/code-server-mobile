@@ -20,7 +20,8 @@ describe("mobile layout", ["--disable-workspace-trust"], {}, () => {
 
   test("should hide the sidebar by default so the editor owns the viewport", async ({ codeServerPage }) => {
     await expect(codeServerPage.page.locator("div.monaco-workbench")).toHaveClass(/phone-layout/)
-    // The sidebar is an overlay in compact mode, not a permanent split.
+    // Compact mode reserves the viewport for the editor until mobile
+    // navigation provides a dedicated non-grid overlay.
     await expect(codeServerPage.page.locator(".part.sidebar")).toBeHidden()
   })
 
@@ -87,5 +88,25 @@ describe("mobile layout persistence", ["--disable-workspace-trust"], {}, () => {
     await expect(workbench).not.toHaveClass(/phone-layout/)
     await expect(sidebar).toBeHidden()
     await expect(panel).toBeVisible()
+  })
+
+  test("should show the editor when compact startup follows a maximized panel", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const workbenchUrl = page.url()
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
+    await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+    await expect(page.locator("#workbench\\.parts\\.editor")).toBeHidden()
+
+    await codeServerPage.stateFlush()
+    await page.goto("about:blank")
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(workbenchUrl)
+    await codeServerPage.reloadUntilEditorIsReady()
+
+    await expect(page.locator("div.monaco-workbench")).toHaveClass(/phone-layout/)
+    await expect(page.locator("#workbench\\.parts\\.editor")).toBeVisible()
+    await expect(page.locator(".part.panel")).toBeHidden()
   })
 })
