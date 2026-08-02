@@ -26,7 +26,23 @@ const config: PlaywrightTestConfig = {
   projects: [
     {
       name: "Chromium",
+      // Mobile specs need a touch-enabled context; they run in "Mobile Chromium".
+      testIgnore: /mobile\..*\.test\.ts/,
       use: { browserName: "chromium" },
+    },
+    // Phone-sized viewport with touch emulation. Required for `page.tap()`,
+    // which throws unless the context has `hasTouch`. Tests that exercise the
+    // compact workbench layout should be run with `--project "Mobile Chromium"`.
+    {
+      name: "Mobile Chromium",
+      testMatch: /mobile\..*\.test\.ts/,
+      use: {
+        browserName: "chromium",
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+        deviceScaleFactor: 3,
+      },
     },
     // Firefox seems to have bugs with opening context menus in the file tree.
     // {
