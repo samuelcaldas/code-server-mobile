@@ -1226,3 +1226,58 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/contrib/files/browser/view
  				} finally {
  					this.delegate?.didOpenElement();
  				}
+Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/visibleViewport.test.ts
+===================================================================
+--- /dev/null
++++ code-server-mobile/lib/vscode/src/vs/workbench/test/browser/visibleViewport.test.ts
+@@ -0,0 +1,50 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import assert from 'assert';
++import { getVisibleViewportBounds } from '../../browser/visibleViewport.js';
++
++suite('WorkbenchVisibleViewport', () => {
++
++	const editorBounds = { top: 35, left: 48, width: 342, height: 787 };
++
++	test('preserves bounds without a visual viewport', () => {
++		assert.deepStrictEqual(getVisibleViewportBounds(editorBounds), editorBounds);
++	});
++
++	test('clips editor bounds above a virtual keyboard', () => {
++		const visualViewport = { offsetTop: 0, offsetLeft: 0, width: 390, height: 460 };
++
++		assert.deepStrictEqual(getVisibleViewportBounds(editorBounds, visualViewport), {
++			top: 35,
++			left: 48,
++			width: 342,
++			height: 425,
++		});
++	});
++
++	test('accounts for a panned visual viewport', () => {
++		const visualViewport = { offsetTop: 100, offsetLeft: 20, width: 350, height: 400 };
++
++		assert.deepStrictEqual(getVisibleViewportBounds(editorBounds, visualViewport), {
++			top: 100,
++			left: 48,
++			width: 322,
++			height: 400,
++		});
++	});
++
++	test('never expands beyond editor bounds', () => {
++		const visualViewport = { offsetTop: 0, offsetLeft: 0, width: 1280, height: 900 };
++
++		assert.deepStrictEqual(getVisibleViewportBounds(editorBounds, visualViewport), editorBounds);
++	});
++
++	test('ignores invalid visual viewport geometry', () => {
++		const visualViewport = { offsetTop: 0, offsetLeft: 0, width: Number.NaN, height: 460 };
++
++		assert.deepStrictEqual(getVisibleViewportBounds(editorBounds, visualViewport), editorBounds);
++	});
++});
