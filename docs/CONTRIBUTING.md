@@ -18,6 +18,7 @@
   - [Script tests](#script-tests)
   - [Integration tests](#integration-tests)
   - [End-to-end tests](#end-to-end-tests)
+  - [Mobile UX validation](#mobile-ux-validation)
 - [Structure](#structure)
   - [Modifications to Code](#modifications-to-code)
   - [Currently Known Issues](#currently-known-issues)
@@ -240,6 +241,28 @@ Take a look at `codeServer.test.ts` to see how you would use it (see
 
 We also have a model where you can create helpers to use within tests. See
 [models/CodeServer.ts](../test/e2e/models/CodeServer.ts) for an example.
+
+### Mobile UX validation
+
+Ensure root and VS Code outputs are current first, for example by running
+`npm run watch` from the repository root. Then run compact-layout Playwright
+coverage with the touch-enabled Mobile Chromium project:
+
+```shell
+npm run test:e2e -- --project "Mobile Chromium"
+```
+
+Run the VS Code-owned viewport-policy suite through its nested browser runner:
+
+```shell
+npm --prefix lib/vscode run test-browser-no-install -- --browser chromium --grep WorkbenchViewportPolicy
+```
+
+Mobile Chromium emulation is a fast regression signal, not device certification.
+It does not cover WebKit/iOS, physical-device keyboards, browser chrome, or all
+touch workflows. See the [mobile touch UX audit](mobile-touch-ux-audit.md) for
+coverage limits and the manual device matrix. Changes to mobile layout behavior
+must also validate wide-desktop behavior and persisted desktop part visibility.
 
 ## Structure
 
