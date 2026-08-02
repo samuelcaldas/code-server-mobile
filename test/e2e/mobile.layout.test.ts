@@ -18,6 +18,17 @@ describe("mobile layout", ["--disable-workspace-trust"], {}, () => {
     await expect(workbench).toHaveClass(/phone-layout/)
   })
 
+  test("should publish visible viewport metrics without changing topology", async ({ codeServerPage }) => {
+    const metrics = await codeServerPage.page.locator("div.monaco-workbench").evaluate(element => ({
+      keyboardHeight: Number.parseFloat(element.style.getPropertyValue("--vscode-keyboard-height")),
+      visibleHeight: Number.parseFloat(element.style.getPropertyValue("--vscode-visible-viewport-height")),
+      visualViewportHeight: window.visualViewport?.height,
+    }))
+
+    expect(metrics.visibleHeight).toBeCloseTo(metrics.visualViewportHeight!)
+    expect(metrics.keyboardHeight).toBe(0)
+  })
+
   test("should hide the sidebar by default so the editor owns the viewport", async ({ codeServerPage }) => {
     await expect(codeServerPage.page.locator("div.monaco-workbench")).toHaveClass(/phone-layout/)
     // Compact mode reserves the viewport for the editor until mobile
@@ -138,6 +149,7 @@ describe("mobile layout maximized panel startup", ["--disable-workspace-trust"],
 describe("mobile layout hidden maximized panel", ["--disable-workspace-trust"], {}, () => {
   test("should preserve the panel remember-last maximized state", async ({ codeServerPage }) => {
     const page = codeServerPage.page
+    const workbench = page.locator("div.monaco-workbench")
     const editor = page.locator("#workbench\\.parts\\.editor")
     const panel = page.locator(".part.panel")
 
@@ -155,7 +167,9 @@ describe("mobile layout hidden maximized panel", ["--disable-workspace-trust"], 
     await expect(editor).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
+    await expect(workbench).toHaveClass(/phone-layout/)
     await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(workbench).not.toHaveClass(/phone-layout/)
     await page.keyboard.press("ControlOrMeta+J")
 
     await expect(editor).toBeHidden()
@@ -360,14 +374,23 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
 
   test("should dismiss Quick Input before the navigation overlay", async ({ codeServerPage }) => {
     const page = codeServerPage.page
+    const workbench = page.locator("div.monaco-workbench")
     const overlay = page.locator(".mobile-navigation-overlay--sidebar")
     const explorer = page.getByRole("tab", { name: /Explorer/ })
     const quickInput = page.locator(".quick-input-widget")
 
+    await workbench.evaluate(element => {
+      element.style.setProperty("--vscode-visible-viewport-half-height", "200px")
+    })
     await explorer.tap()
     await expect(overlay).toBeVisible()
     await page.keyboard.press("ControlOrMeta+P")
     await expect(quickInput).toBeVisible()
+
+    const listMaxHeight = await quickInput.locator(".quick-input-list .monaco-list").evaluate(element => {
+      return Number.parseFloat(window.getComputedStyle(element).maxHeight)
+    })
+    expect(listMaxHeight).toBeLessThanOrEqual(200)
 
     await page.keyboard.press("Escape")
 
