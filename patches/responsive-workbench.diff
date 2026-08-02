@@ -360,7 +360,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,142 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -410,6 +410,11 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +.monaco-workbench.phone-layout .editor-actions .action-item > .action-label {
 +	min-height: 0;
 +	min-width: 0;
++}
++
++.monaco-workbench.phone-layout .part.activitybar .menubar,
++.monaco-workbench.phone-layout .part.activitybar .menubar.compact .toolbar-toggle-more {
++	height: 44px;
 +}
 +
 +.monaco-workbench.phone-layout .action-item,
