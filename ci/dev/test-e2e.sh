@@ -21,6 +21,12 @@ main() {
   local dir="$PWD"
   if [[ ! ${CODE_SERVER_TEST_ENTRY-} ]]; then
     echo "Set CODE_SERVER_TEST_ENTRY to test another build of code-server"
+    # We are testing the working tree, whose lib/vscode/out is an unbundled dev
+    # build. Code serves workbench-dev.html and the CSS import map it needs only
+    # when VSCODE_DEV is set; without it the server serves the production
+    # workbench.html, every `import './x.css'` is rejected for its MIME type,
+    # and the workbench never renders. A release build must not get this.
+    export VSCODE_DEV=1
   else
     pushd "$CODE_SERVER_TEST_ENTRY"
     dir="$PWD"
