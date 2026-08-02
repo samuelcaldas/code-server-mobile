@@ -218,6 +218,24 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
 
+  test("should move from Explorer to editing and Source Control by touch", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const overlay = page.locator(".mobile-navigation-overlay--sidebar")
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+    const sourceControl = page.getByRole("tab", { name: /Source Control/ })
+
+    await explorer.tap()
+    await expect(overlay).toBeVisible()
+    await page.getByRole("treeitem", { name: /config.yaml/ }).tap()
+
+    await expect(overlay).toBeHidden()
+    await expect(page.locator(".tabs-container .tab", { hasText: "config.yaml" })).toBeVisible()
+
+    await sourceControl.tap()
+    await expect(overlay).toBeVisible()
+    await expect(sourceControl).toHaveAttribute("aria-selected", "true")
+  })
+
   test("should open the panel as a bottom sheet", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const editor = page.locator("#workbench\\.parts\\.editor")
