@@ -230,6 +230,7 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
 
     await expect(overlay).toBeHidden()
     await expect(page.locator(".tabs-container .tab", { hasText: "config.yaml" })).toBeVisible()
+    await expect(page.locator("#workbench\\.parts\\.editor .monaco-editor.focused")).toBeVisible()
 
     await sourceControl.tap()
     await expect(overlay).toBeVisible()
