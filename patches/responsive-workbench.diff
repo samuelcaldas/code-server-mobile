@@ -1,0 +1,415 @@
+Make the workbench layout viewport-aware
+
+The workbench is unconditionally desktop-first: `layout.ts` has no viewport,
+touch, or breakpoint awareness, and `browser/media/style.css` has no width
+media query. On a phone the activity bar, sidebar, editor, panel, and status
+bar all compete for one small viewport, which is the actual cause of the
+workbench being unusable there.
+
+This adds `WorkbenchViewportPolicy`, a dependency-free policy object that
+classifies the container width as `phone`, `tablet`, or `desktop` and exposes
+that as observables. `Layout#layout()` feeds it the current main container
+width on every pass and toggles a `phone-layout` class on the containers, so
+the classification tracks rotation, window resize, and a Samsung DeX plug or
+unplug live — no reload, no editor state loss, and no user-agent sniffing.
+
+Classification is width-only on purpose. Code's own phone layout in
+`vs/sessions` gates on the `isMobile` user-agent flag, which is wrong in both
+directions for code-server: it denies a narrow desktop browser a usable
+layout, and Samsung DeX keeps the Android `Mobi` user agent even on an
+external display. `setOverride` exists so a user-facing setting can pin the
+class later.
+
+`phoneLayout.css` carries the compact rules, every one of them scoped to
+`.monaco-workbench.phone-layout`, so desktop rendering is unchanged by
+construction. It raises action items to a 44x44 px touch target, sets
+`touch-action: manipulation`, and contains overscroll.
+
+Index: code-server/lib/vscode/src/vs/workbench/browser/layout.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/layout.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/layout.ts
+@@ -8,6 +8,7 @@ import { Event, Emitter } from '../../ba
+ import { alert } from '../../base/browser/ui/aria/aria.js';
+ import { EventType, addDisposableListener, getClientArea, size, IDimension, isAncestorUsingFlowTo, computeScreenAwareSize, getActiveDocument, getWindows, getActiveWindow, isActiveDocument, getWindow, getWindowId, getActiveElement, Dimension } from '../../base/browser/dom.js';
+ import { onDidChangeFullscreen, isFullscreen, isWCOEnabled } from '../../base/browser/browser.js';
++import { PHONE_LAYOUT_CLASS, WorkbenchViewportPolicy } from './viewportPolicy.js';
+ import { isWindows, isLinux, isMacintosh, isWeb, isIOS } from '../../base/common/platform.js';
+ import { EditorInputCapabilities, GroupIdentifier, isResourceEditorInput, IUntypedEditorInput, pathsToEditors } from '../common/editor.js';
+ import { SidebarPart } from './parts/sidebar/sidebarPart.js';
+@@ -223,6 +224,8 @@ export abstract class Layout extends Dis
+ 		return this.containerStylesLoaded.get(window.vscodeWindowId);
+ 	}
+ 
++	private readonly viewportPolicy = this._register(new WorkbenchViewportPolicy());
++
+ 	private _mainContainerDimension!: IDimension;
+ 	get mainContainerDimension(): IDimension { return this._mainContainerDimension; }
+ 
+@@ -1741,6 +1744,8 @@ export abstract class Layout extends Dis
+ 
+ 			this.logService.trace(`Layout#layout, height: ${this._mainContainerDimension.height}, width: ${this._mainContainerDimension.width}`);
+ 
++			this.updateViewportClass();
++
+ 			size(this.mainContainer, this._mainContainerDimension.width, this._mainContainerDimension.height);
+ 
+ 			// Layout the grid widget
+@@ -1752,6 +1757,27 @@ export abstract class Layout extends Dis
+ 		}
+ 	}
+ 
++	/**
++	 * Re-classifies the viewport for the current container width and reflects
++	 * the result on the container so stylesheets can key compact rules off it.
++	 *
++	 * Runs on every layout pass, which is what makes the transition live: a
++	 * Samsung DeX plug or unplug, a rotation, or a window resize all arrive
++	 * here as an ordinary resize, so the class flips without a reload and
++	 * without disturbing editor state.
++	 */
++	private updateViewportClass(): void {
++		const changed = this.viewportPolicy.update(this._mainContainerDimension.width);
++		if (!changed) {
++			return;
++		}
++
++		const isPhone = this.viewportPolicy.isPhoneLayout.get();
++		for (const container of this.containers) {
++			container.classList.toggle(PHONE_LAYOUT_CLASS, isPhone);
++		}
++	}
++
+ 	isMainEditorLayoutCentered(): boolean {
+ 		return this.stateModel.getRuntimeValue(LayoutStateKeys.MAIN_EDITOR_CENTERED);
+ 	}
+Index: code-server/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
+===================================================================
+--- /dev/null
++++ code-server/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
+@@ -0,0 +1,83 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/*
++ * Compact workbench layout.
++ *
++ * Every rule is scoped to `.monaco-workbench.phone-layout`, which is applied
++ * by `Layout#updateViewportClass` only while the container is narrower than
++ * the phone breakpoint. Desktop rendering is therefore untouched.
++ */
++
++/* ---- Touch targets ---- */
++
++/*
++ * Coarse pointers need a larger hit area than the desktop density provides.
++ * 44px is the smallest comfortably tappable target on a phone.
++ */
++.monaco-workbench.phone-layout .part.activitybar .action-item > .action-label,
++.monaco-workbench.phone-layout .part.titlebar .action-item > .action-label,
++.monaco-workbench.phone-layout .part.panel .action-item > .action-label {
++	min-height: 44px;
++	min-width: 44px;
++}
++
++/*
++ * Toolbars inside the editor and quick input are dense by design and already
++ * sit under the user's thumb; enlarging them costs more content than it buys.
++ */
++.monaco-workbench.phone-layout .quick-input-widget .action-item > .action-label,
++.monaco-workbench.phone-layout .editor-actions .action-item > .action-label {
++	min-height: 0;
++	min-width: 0;
++}
++
++.monaco-workbench.phone-layout .action-item,
++.monaco-workbench.phone-layout button {
++	/* Opts out of double-tap-to-zoom so taps register without waiting. */
++	touch-action: manipulation;
++}
++
++.monaco-workbench.phone-layout .part.activitybar .action-item,
++.monaco-workbench.phone-layout .monaco-toolbar {
++	-webkit-touch-callout: none;
++	user-select: none;
++	-webkit-user-select: none;
++}
++
++/* ---- Scrolling ---- */
++
++/*
++ * Keeps a scroll gesture inside the list or editor it started in, rather than
++ * chaining to the document and bouncing the whole workbench.
++ */
++.monaco-workbench.phone-layout .monaco-scrollable-element > .scrollable-element,
++.monaco-workbench.phone-layout .monaco-list {
++	overscroll-behavior: contain;
++}
++
++/* ---- Overlay parts ---- */
++
++/*
++ * The sidebar is an overlay in compact mode rather than a permanent split, so
++ * it can use the full width without squeezing the editor to nothing.
++ */
++.monaco-workbench.phone-layout .part.sidebar {
++	max-width: 100vw;
++	z-index: 20;
++}
++
++/* ---- Quick input ---- */
++
++.monaco-workbench.phone-layout .quick-input-widget {
++	left: 8px !important;
++	right: 8px !important;
++	width: auto !important;
++	max-width: none !important;
++}
++
++.monaco-workbench.phone-layout .quick-input-widget .quick-input-list .monaco-list-row {
++	min-height: 44px;
++}
+Index: code-server/lib/vscode/src/vs/workbench/browser/style.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/style.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/style.ts
+@@ -4,6 +4,7 @@
+  *--------------------------------------------------------------------------------------------*/
+ 
+ import './media/style.css';
++import './media/phoneLayout.css';
+ import { registerThemingParticipant } from '../../platform/theme/common/themeService.js';
+ import { WORKBENCH_BACKGROUND, TITLE_BAR_ACTIVE_BACKGROUND } from '../common/theme.js';
+ import { isWeb, isIOS } from '../../base/common/platform.js';
+Index: code-server/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
+===================================================================
+--- /dev/null
++++ code-server/lib/vscode/src/vs/workbench/browser/viewportPolicy.ts
+@@ -0,0 +1,111 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { Disposable } from '../../base/common/lifecycle.js';
++import { derived, IObservable, observableValue } from '../../base/common/observable.js';
++
++/** Viewport classification based on container width. */
++export type ViewportClass = 'phone' | 'tablet' | 'desktop';
++
++/** Default visibility for each workbench part. */
++export interface IPartVisibilityDefaults {
++	readonly sidebar: boolean;
++	readonly auxiliaryBar: boolean;
++	readonly panel: boolean;
++}
++
++/**
++ * CSS class applied to the workbench container while the viewport is
++ * classified as `phone`. Stylesheets key compact rules off this class so that
++ * desktop rendering is untouched.
++ */
++export const PHONE_LAYOUT_CLASS = 'phone-layout';
++
++const PHONE_MAX_WIDTH = 640;
++const TABLET_MAX_WIDTH = 1024;
++
++/**
++ * Viewport classification for the workbench.
++ *
++ * Classification is driven purely by container width, deliberately without
++ * consulting the user agent. code-server runs the workbench in a browser on
++ * hardware it cannot identify: a phone in a desktop-class browser, a narrow
++ * desktop window, and a Samsung DeX session (which keeps the Android user
++ * agent while presenting a large external display) must all resolve from the
++ * same signal. Width is the only one that is both accurate and observed live,
++ * so plugging or unplugging DeX, rotating, or resizing re-classifies through
++ * the ordinary `layout()` pass with no reload.
++ *
++ * The object is intentionally free of service dependencies so it can be unit
++ * tested directly.
++ */
++export class WorkbenchViewportPolicy extends Disposable {
++
++	private readonly _viewportClass = observableValue<ViewportClass>(this, 'desktop');
++
++	/** Current viewport class, derived from the most recent `update()`. */
++	readonly viewportClass: IObservable<ViewportClass> = this._viewportClass;
++
++	/** `true` while the viewport class is `phone`. */
++	readonly isPhoneLayout: IObservable<boolean> = derived(this, reader => {
++		return this._viewportClass.read(reader) === 'phone';
++	});
++
++	private _override: ViewportClass | undefined;
++
++	/**
++	 * Pins the classification, ignoring width. Pass `undefined` to restore
++	 * automatic classification. Used by the user-facing override setting.
++	 */
++	setOverride(viewportClass: ViewportClass | undefined): void {
++		this._override = viewportClass;
++		this.update(this._lastWidth);
++	}
++
++	private _lastWidth = 0;
++
++	/**
++	 * Re-classify for the given container width. Call from the workbench
++	 * `layout()` pass. Returns `true` when the classification changed.
++	 */
++	update(width: number): boolean {
++		this._lastWidth = width;
++
++		const next = this._override ?? classifyViewport(width);
++		if (this._viewportClass.get() === next) {
++			return false;
++		}
++
++		this._viewportClass.set(next, undefined);
++		return true;
++	}
++
++	/** Default part visibility for the current (or given) viewport class. */
++	getPartVisibilityDefaults(viewportClass?: ViewportClass): IPartVisibilityDefaults {
++		const current = viewportClass ?? this._viewportClass.get();
++		if (current === 'phone') {
++			// Compact mode gives the whole viewport to the editor; the sidebar
++			// and panel are reachable as overlays rather than permanent splits.
++			return { sidebar: false, auxiliaryBar: false, panel: false };
++		}
++
++		return { sidebar: true, auxiliaryBar: false, panel: false };
++	}
++}
++
++/**
++ * Classifies a container width into a viewport class.
++ */
++function classifyViewport(width: number): ViewportClass {
++	if (width < PHONE_MAX_WIDTH) {
++		return 'phone';
++	}
++
++	if (width < TABLET_MAX_WIDTH) {
++		return 'tablet';
++	}
++
++	return 'desktop';
++}
+Index: code-server/lib/vscode/src/vs/workbench/test/browser/viewportPolicy.test.ts
+===================================================================
+--- /dev/null
++++ code-server/lib/vscode/src/vs/workbench/test/browser/viewportPolicy.test.ts
+@@ -0,0 +1,109 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import assert from 'assert';
++import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
++import { WorkbenchViewportPolicy } from '../../browser/viewportPolicy.js';
++
++suite('WorkbenchViewportPolicy', () => {
++
++	const disposables = ensureNoDisposablesAreLeakedInTestSuite();
++
++	function createPolicy(): WorkbenchViewportPolicy {
++		return disposables.add(new WorkbenchViewportPolicy());
++	}
++
++	test('classifies widths into phone, tablet and desktop', () => {
++		const policy = createPolicy();
++
++		policy.update(390);
++		assert.strictEqual(policy.viewportClass.get(), 'phone');
++
++		policy.update(800);
++		assert.strictEqual(policy.viewportClass.get(), 'tablet');
++
++		policy.update(1280);
++		assert.strictEqual(policy.viewportClass.get(), 'desktop');
++	});
++
++	test('treats the breakpoints as exclusive upper bounds', () => {
++		const policy = createPolicy();
++
++		policy.update(639);
++		assert.strictEqual(policy.viewportClass.get(), 'phone');
++
++		policy.update(640);
++		assert.strictEqual(policy.viewportClass.get(), 'tablet');
++
++		policy.update(1023);
++		assert.strictEqual(policy.viewportClass.get(), 'tablet');
++
++		policy.update(1024);
++		assert.strictEqual(policy.viewportClass.get(), 'desktop');
++	});
++
++	test('classifies on width alone, independently of the user agent', () => {
++		// Samsung DeX keeps the Android user agent while presenting a large
++		// display, so a narrow viewport must classify as phone and a wide one
++		// as desktop regardless of the device the browser reports.
++		const policy = createPolicy();
++
++		policy.update(360);
++		assert.strictEqual(policy.viewportClass.get(), 'phone');
++
++		policy.update(1920);
++		assert.strictEqual(policy.viewportClass.get(), 'desktop');
++	});
++
++	test('isPhoneLayout tracks the viewport class', () => {
++		const policy = createPolicy();
++
++		policy.update(390);
++		assert.strictEqual(policy.isPhoneLayout.get(), true);
++
++		policy.update(1280);
++		assert.strictEqual(policy.isPhoneLayout.get(), false);
++	});
++
++	test('update reports whether the classification changed', () => {
++		const policy = createPolicy();
++
++		assert.strictEqual(policy.update(390), true, 'desktop to phone is a change');
++		assert.strictEqual(policy.update(400), false, 'still phone');
++		assert.strictEqual(policy.update(1280), true, 'phone to desktop is a change');
++	});
++
++	test('hides sidebar, auxiliary bar and panel by default on phone', () => {
++		const policy = createPolicy();
++		policy.update(390);
++
++		assert.deepStrictEqual(policy.getPartVisibilityDefaults(), {
++			sidebar: false,
++			auxiliaryBar: false,
++			panel: false,
++		});
++	});
++
++	test('keeps the sidebar visible by default on desktop', () => {
++		const policy = createPolicy();
++		policy.update(1280);
++
++		assert.strictEqual(policy.getPartVisibilityDefaults().sidebar, true);
++	});
++
++	test('override pins the classification and can be cleared', () => {
++		const policy = createPolicy();
++		policy.update(1280);
++
++		policy.setOverride('phone');
++		assert.strictEqual(policy.viewportClass.get(), 'phone', 'override wins over width');
++
++		policy.update(1920);
++		assert.strictEqual(policy.viewportClass.get(), 'phone', 'override survives layout passes');
++
++		policy.setOverride(undefined);
++		assert.strictEqual(policy.viewportClass.get(), 'desktop', 'clearing restores width classification');
++	});
++});

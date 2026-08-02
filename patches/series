@@ -24,4 +24,5 @@ trusted-domains.diff
 signature-verification.diff
 copilot.diff
 app-name.diff
+responsive-workbench.diff
 csp-hashes.diff
