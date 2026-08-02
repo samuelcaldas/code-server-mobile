@@ -199,3 +199,22 @@ describe("mobile layout maximized auxiliary bar", ["--disable-workspace-trust"],
     await expect(panel).toBeHidden()
   })
 })
+
+describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => {
+  test("should open Explorer without resizing the editor", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const editor = page.locator("#workbench\\.parts\\.editor")
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+
+    await expect(editor).toBeVisible()
+    const editorBoundsBefore = await editor.boundingBox()
+    expect(editorBoundsBefore).not.toBeNull()
+
+    await expect(explorer).toBeVisible()
+    await explorer.tap()
+
+    await expect(page.locator(".mobile-navigation-overlay--sidebar")).toBeVisible()
+    await expect(page.locator(".mobile-navigation-backdrop")).toBeVisible()
+    expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
+  })
+})
