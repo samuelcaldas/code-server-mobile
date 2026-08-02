@@ -36,12 +36,18 @@ describe("mobile layout", ["--disable-workspace-trust"], {}, () => {
     expect(box!.width).toBeGreaterThanOrEqual(44)
   })
 
-  test("should not apply the compact layout at a desktop width", async ({ codeServerPage }) => {
-    // Live transition: widening past the breakpoint must drop compact mode
-    // without a reload (the DeX plug case).
+  test("should restore desktop part visibility after a live transition", async ({ codeServerPage }) => {
+    const workbench = codeServerPage.page.locator("div.monaco-workbench")
+    const sidebar = codeServerPage.page.locator(".part.sidebar")
+
+    await expect(workbench).toHaveClass(/phone-layout/)
+    await expect(sidebar).toBeHidden()
+
+    // Widening past the breakpoint models plugging into DeX. The workbench must
+    // restore its desktop layout in place rather than reload and lose state.
     await codeServerPage.page.setViewportSize({ width: 1280, height: 800 })
 
-    const workbench = codeServerPage.page.locator("div.monaco-workbench")
     await expect(workbench).not.toHaveClass(/phone-layout/)
+    await expect(sidebar).toBeVisible()
   })
 })
