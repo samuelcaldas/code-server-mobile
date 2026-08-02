@@ -802,7 +802,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,242 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -827,6 +827,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	readonly height: number;
 +}
 +
++interface IFocusRestorationTarget {
++	readonly element: HTMLElement;
++	readonly role: string | null;
++	readonly roleIndex: number;
++}
++
 +/** Presents existing workbench parts above the editor without changing grid visibility. */
 +export class MobileNavigationOverlayController extends Disposable {
 +
@@ -834,7 +840,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	private readonly backdropDisposables = this._register(new DisposableStore());
 +	private activePart: Parts | undefined;
 +	private activeHost: HTMLElement | undefined;
-+	private previouslyFocusedElement: HTMLElement | undefined;
++	private focusRestorationTarget: IFocusRestorationTarget | undefined;
 +	private pendingHistoryBack = false;
 +	private historyId = 0;
 +
@@ -867,7 +873,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +			return false;
 +		}
 +
-+		this.previouslyFocusedElement = mainWindow.document.activeElement instanceof HTMLElement ? mainWindow.document.activeElement : undefined;
++		this.focusRestorationTarget = this.captureFocusRestorationTarget();
 +		this.activePart = part;
 +		this.activeHost = host;
 +		this.applyOverlayClasses(element, host, part);
@@ -912,7 +918,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		this.backdropDisposables.add(Gesture.addTarget(this.backdrop));
 +		this.backdropDisposables.add(addDisposableListener(this.backdrop, GestureEventType.Tap, () => this.onDidRequestClose(true)));
 +		this.backdropDisposables.add(addDisposableListener(this.backdrop, EventType.CLICK, () => this.onDidRequestClose(true)));
-+		this._register(addDisposableListener(mainWindow, EventType.KEY_DOWN, event => this.onKeyDown(event)));
++		this._register(addDisposableListener(mainWindow, EventType.KEY_DOWN, event => this.onKeyDown(event), true));
 +		this._register(addDisposableListener(mainWindow, 'popstate', () => this.onPopState()));
 +	}
 +
@@ -922,6 +928,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		}
 +
 +		event.preventDefault();
++		event.stopPropagation();
 +		this.onDidRequestClose(true);
 +	}
 +
@@ -931,7 +938,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +			return;
 +		}
 +
-+		this.onDidRequestClose(false);
++		mainWindow.setTimeout(() => this.onDidRequestClose(false));
 +	}
 +
 +	private applyOverlayClasses(element: HTMLElement, host: HTMLElement, part: Parts): void {
@@ -980,20 +987,41 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		element?.setAttribute('role', 'none');
 +	}
 +
++	private captureFocusRestorationTarget(): IFocusRestorationTarget | undefined {
++		const element = mainWindow.document.activeElement;
++		if (!(element instanceof HTMLElement)) {
++			return undefined;
++		}
++
++		const role = element.getAttribute('role');
++		const roleIndex = role ? getElementsWithRole(role).indexOf(element) : -1;
++		return { element, role, roleIndex };
++	}
++
 +	private restoreFocus(): void {
-+		if (!this.previouslyFocusedElement?.isConnected) {
-+			this.previouslyFocusedElement = undefined;
++		const target = this.focusRestorationTarget;
++		this.focusRestorationTarget = undefined;
++		if (!target) {
 +			return;
 +		}
 +
-+		this.previouslyFocusedElement.focus();
-+		this.previouslyFocusedElement = undefined;
++		const element = target.element.isConnected ? target.element : getElementsWithRole(target.role)[target.roleIndex];
++		element?.focus();
 +	}
 +
 +	private pushHistoryState(part: Parts): void {
 +		this.historyId++;
 +		mainWindow.history.pushState({ [HISTORY_STATE_KEY]: this.historyId, part }, '');
 +	}
++}
++
++function getElementsWithRole(role: string | null): HTMLElement[] {
++	if (!role) {
++		return [];
++	}
++
++	return Array.from(mainWindow.document.querySelectorAll<HTMLElement>('[role]'))
++		.filter(element => element.getAttribute('role') === role);
 +}
 +
 +function isSupportedPart(part: Parts): boolean {
