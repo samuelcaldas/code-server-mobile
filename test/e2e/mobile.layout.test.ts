@@ -269,6 +269,26 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await expect(sourceControl).toBeFocused()
   })
 
+  test("should dismiss Quick Input before the navigation overlay", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const overlay = page.locator(".mobile-navigation-overlay--sidebar")
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+    const quickInput = page.locator(".quick-input-widget")
+
+    await explorer.tap()
+    await expect(overlay).toBeVisible()
+    await page.keyboard.press("ControlOrMeta+P")
+    await expect(quickInput).toBeVisible()
+
+    await page.keyboard.press("Escape")
+
+    await expect(quickInput).toBeHidden()
+    await expect(overlay).toBeVisible()
+
+    await page.keyboard.press("Escape")
+    await expect(overlay).toBeHidden()
+  })
+
   test("should restore the desktop sidebar selection after compact navigation", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const workbench = page.locator("div.monaco-workbench")
