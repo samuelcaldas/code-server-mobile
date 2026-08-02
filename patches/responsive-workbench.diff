@@ -33,20 +33,58 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  import { alert } from '../../base/browser/ui/aria/aria.js';
  import { EventType, addDisposableListener, getClientArea, size, IDimension, isAncestorUsingFlowTo, computeScreenAwareSize, getActiveDocument, getWindows, getActiveWindow, isActiveDocument, getWindow, getWindowId, getActiveElement, Dimension } from '../../base/browser/dom.js';
  import { onDidChangeFullscreen, isFullscreen, isWCOEnabled } from '../../base/browser/browser.js';
-+import { PHONE_LAYOUT_CLASS, WorkbenchViewportPolicy } from './viewportPolicy.js';
++import { IPartVisibilityDefaults, PHONE_LAYOUT_CLASS, WorkbenchViewportPolicy } from './viewportPolicy.js';
  import { isWindows, isLinux, isMacintosh, isWeb, isIOS } from '../../base/common/platform.js';
  import { EditorInputCapabilities, GroupIdentifier, isResourceEditorInput, IUntypedEditorInput, pathsToEditors } from '../common/editor.js';
  import { SidebarPart } from './parts/sidebar/sidebarPart.js';
-@@ -223,6 +224,8 @@ export abstract class Layout extends Dis
+@@ -223,6 +224,9 @@ export abstract class Layout extends Dis
  		return this.containerStylesLoaded.get(window.vscodeWindowId);
  	}
  
 +	private readonly viewportPolicy = this._register(new WorkbenchViewportPolicy());
++	private desktopPartVisibility: IPartVisibilityDefaults | undefined;
 +
  	private _mainContainerDimension!: IDimension;
  	get mainContainerDimension(): IDimension { return this._mainContainerDimension; }
  
-@@ -1741,6 +1744,8 @@ export abstract class Layout extends Dis
+@@ -727,6 +731,7 @@ export abstract class Layout extends Dis
+ 			mainContainerDimension: this._mainContainerDimension,
+ 			resetLayout: Boolean(this.layoutOptions?.resetLayout)
+ 		});
++		this.initializePhoneLayoutState();
+ 
+ 		this._register(this.stateModel.onDidChangeState(change => {
+ 			if (change.key === LayoutStateKeys.ACTIVITYBAR_HIDDEN) {
+@@ -840,6 +845,19 @@ export abstract class Layout extends Dis
+ 		this.updateWindowBorder(true);
+ 	}
+ 
++	private initializePhoneLayoutState(): void {
++		this.viewportPolicy.update(this._mainContainerDimension.width);
++		if (!this.viewportPolicy.isPhoneLayout.get()) {
++			return;
++		}
++
++		this.desktopPartVisibility = this.getPartVisibility();
++		const visibilityDefaults = this.viewportPolicy.getPartVisibilityDefaults();
++		this.stateModel.setRuntimeValue(LayoutStateKeys.SIDEBAR_HIDDEN, !visibilityDefaults.sidebar);
++		this.stateModel.setRuntimeValue(LayoutStateKeys.PANEL_HIDDEN, !visibilityDefaults.panel);
++		this.stateModel.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, !visibilityDefaults.auxiliaryBar);
++	}
++
+ 	private getDefaultLayoutViews(environmentService: IBrowserWorkbenchEnvironmentService, storageService: IStorageService): string[] | undefined {
+ 		const defaultLayout = environmentService.options?.defaultLayout;
+ 		if (!defaultLayout) {
+@@ -1721,7 +1739,7 @@ export abstract class Layout extends Dis
+ 				: this.workbenchGrid.getViewSize(this.auxiliaryBarPartView).width;
+ 			this.stateModel.setInitializationValue(LayoutStateKeys.AUXILIARYBAR_SIZE, auxiliaryBarSize as number);
+ 
+-			this.stateModel.save(true, true);
++			this.stateModel.save(true, true, this.desktopPartVisibility);
+ 		}));
+ 
+ 		this._register(Event.any(this.paneCompositeService.onDidPaneCompositeOpen, this.paneCompositeService.onDidPaneCompositeClose)(() => {
+@@ -1741,6 +1759,8 @@ export abstract class Layout extends Dis
  
  			this.logService.trace(`Layout#layout, height: ${this._mainContainerDimension.height}, width: ${this._mainContainerDimension.width}`);
  
@@ -55,7 +93,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			size(this.mainContainer, this._mainContainerDimension.width, this._mainContainerDimension.height);
  
  			// Layout the grid widget
-@@ -1752,6 +1757,27 @@ export abstract class Layout extends Dis
+@@ -1752,6 +1772,60 @@ export abstract class Layout extends Dis
  		}
  	}
  
@@ -74,15 +112,123 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +			return;
 +		}
 +
-+		const isPhone = this.viewportPolicy.isPhoneLayout.get();
-+		for (const container of this.containers) {
-+			container.classList.toggle(PHONE_LAYOUT_CLASS, isPhone);
++		const isPhoneLayout = this.viewportPolicy.isPhoneLayout.get();
++		this.mainContainer.classList.toggle(PHONE_LAYOUT_CLASS, isPhoneLayout);
++		if (isPhoneLayout) {
++			this.enterPhoneLayout();
++			return;
 +		}
++
++		this.exitPhoneLayout();
++	}
++
++	private enterPhoneLayout(): void {
++		this.desktopPartVisibility = this.getPartVisibility();
++		this.applyPartVisibility(this.viewportPolicy.getPartVisibilityDefaults());
++	}
++
++	private getPartVisibility(): IPartVisibilityDefaults {
++		return {
++			sidebar: this.isVisible(Parts.SIDEBAR_PART),
++			panel: this.isVisible(Parts.PANEL_PART),
++			auxiliaryBar: this.isVisible(Parts.AUXILIARYBAR_PART)
++		};
++	}
++
++	private exitPhoneLayout(): void {
++		const desktopPartVisibility = this.desktopPartVisibility;
++		if (!desktopPartVisibility) {
++			return;
++		}
++
++		this.applyPartVisibility(desktopPartVisibility);
++		this.desktopPartVisibility = undefined;
++	}
++
++	private applyPartVisibility(visibility: IPartVisibilityDefaults): void {
++		this.setSideBarHidden(!visibility.sidebar);
++		this.setPanelHidden(!visibility.panel, true);
++		this.setAuxiliaryBarHidden(!visibility.auxiliaryBar, true);
 +	}
 +
  	isMainEditorLayoutCentered(): boolean {
  		return this.stateModel.getRuntimeValue(LayoutStateKeys.MAIN_EDITOR_CENTERED);
  	}
+@@ -1906,6 +1980,7 @@ export abstract class Layout extends Dis
+ 
+ 	getLayoutClasses(): string[] {
+ 		return coalesce([
++			this.viewportPolicy.isPhoneLayout.get() ? PHONE_LAYOUT_CLASS : undefined,
+ 			!this.isVisible(Parts.SIDEBAR_PART) ? LayoutClasses.SIDEBAR_HIDDEN : undefined,
+ 			!this.isVisible(Parts.EDITOR_PART, mainWindow) ? LayoutClasses.MAIN_EDITOR_AREA_HIDDEN : undefined,
+ 			!this.isVisible(Parts.PANEL_PART) ? LayoutClasses.PANEL_HIDDEN : undefined,
+@@ -3120,22 +3195,43 @@ class LayoutStateModel extends Disposabl
+ 		this.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, value);
+ 	}
+ 
+-	save(workspace: boolean, global: boolean): void {
++	save(workspace: boolean, global: boolean, desktopPartVisibility?: IPartVisibilityDefaults): void {
+ 		let key: keyof typeof LayoutStateKeys;
+-
+ 		const isZenMode = this.getRuntimeValue(LayoutStateKeys.ZEN_MODE_ACTIVE);
+-
+ 		for (key in LayoutStateKeys) {
+ 			const stateKey = LayoutStateKeys[key] as WorkbenchLayoutStateKey<StorageKeyType>;
+-			if ((workspace && stateKey.scope === StorageScope.WORKSPACE) ||
+-				(global && stateKey.scope === StorageScope.PROFILE)) {
+-				if (isZenMode && stateKey instanceof RuntimeStateKey && stateKey.zenModeIgnore) {
+-					continue; // Don't write out specific keys while in zen mode
+-				}
+-
+-				this.saveKeyToStorage(stateKey);
++			if (!this.shouldSaveStateKey(stateKey, workspace, global, isZenMode) || (desktopPartVisibility && this.isDesktopPartVisibilityKey(stateKey))) {
++				continue;
+ 			}
++
++			this.saveKeyToStorage(stateKey);
+ 		}
++
++		this.saveDesktopPartVisibility(workspace, desktopPartVisibility);
++	}
++
++	private shouldSaveStateKey(stateKey: WorkbenchLayoutStateKey<StorageKeyType>, workspace: boolean, global: boolean, isZenMode: boolean): boolean {
++		if (!((workspace && stateKey.scope === StorageScope.WORKSPACE) || (global && stateKey.scope === StorageScope.PROFILE))) {
++			return false;
++		}
++
++		return !isZenMode || !(stateKey instanceof RuntimeStateKey && stateKey.zenModeIgnore);
++	}
++
++	private isDesktopPartVisibilityKey(stateKey: WorkbenchLayoutStateKey<StorageKeyType>): boolean {
++		return stateKey === LayoutStateKeys.SIDEBAR_HIDDEN ||
++			stateKey === LayoutStateKeys.PANEL_HIDDEN ||
++			stateKey === LayoutStateKeys.AUXILIARYBAR_HIDDEN;
++	}
++
++	private saveDesktopPartVisibility(workspace: boolean, desktopPartVisibility?: IPartVisibilityDefaults): void {
++		if (!workspace || !desktopPartVisibility) {
++			return;
++		}
++
++		this.saveKeyToStorage(LayoutStateKeys.SIDEBAR_HIDDEN, !desktopPartVisibility.sidebar);
++		this.saveKeyToStorage(LayoutStateKeys.PANEL_HIDDEN, !desktopPartVisibility.panel);
++		this.saveKeyToStorage(LayoutStateKeys.AUXILIARYBAR_HIDDEN, !desktopPartVisibility.auxiliaryBar);
+ 	}
+ 
+ 	getInitializationValue<T extends StorageKeyType>(key: InitializationStateKey<T>): T {
+@@ -3195,9 +3291,9 @@ class LayoutStateModel extends Disposabl
+ 		this._onDidChangeState.fire({ key, value });
+ 	}
+ 
+-	private saveKeyToStorage<T extends StorageKeyType>(key: WorkbenchLayoutStateKey<T>): void {
+-		const value = this.stateCache.get(key.name) as T;
+-		this.storageService.store(`${LayoutStateModel.STORAGE_PREFIX}${key.name}`, typeof value === 'object' ? JSON.stringify(value) : value, key.scope, key.target);
++	private saveKeyToStorage<T extends StorageKeyType>(key: WorkbenchLayoutStateKey<T>, value?: T): void {
++		const valueToStore = value === undefined ? this.stateCache.get(key.name) as T : value;
++		this.storageService.store(`${LayoutStateModel.STORAGE_PREFIX}${key.name}`, typeof valueToStore === 'object' ? JSON.stringify(valueToStore) : valueToStore, key.scope, key.target);
+ 	}
+ 
+ 	private loadKeyFromStorage<T extends StorageKeyType>(key: WorkbenchLayoutStateKey<T>): T | undefined {
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
 ===================================================================
 --- /dev/null
