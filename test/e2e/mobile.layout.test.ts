@@ -237,6 +237,33 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
 
+  test("should dismiss overlays through touch, Escape, and browser Back", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const overlay = page.locator(".mobile-navigation-overlay--sidebar")
+    const backdrop = page.locator(".mobile-navigation-backdrop")
+    const explorer = page.getByRole("tab", { name: /Explorer/ })
+    const search = page.getByRole("tab", { name: /Search/ })
+    const sourceControl = page.getByRole("tab", { name: /Source Control/ })
+
+    await explorer.tap()
+    await expect(overlay).toBeVisible()
+    await backdrop.tap()
+    await expect(overlay).toBeHidden()
+    await expect(explorer).toBeFocused()
+
+    await search.tap()
+    await expect(overlay).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(overlay).toBeHidden()
+    await expect(search).toBeFocused()
+
+    await sourceControl.tap()
+    await expect(overlay).toBeVisible()
+    await page.evaluate(() => history.back())
+    await expect(overlay).toBeHidden()
+    await expect(sourceControl).toBeFocused()
+  })
+
   test("should restore the desktop sidebar selection after compact navigation", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const workbench = page.locator("div.monaco-workbench")
