@@ -336,7 +336,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,137 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -460,9 +460,18 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +	box-shadow: 0 0 16px var(--vscode-widget-shadow);
 +}
 +
-+.monaco-workbench.phone-layout .mobile-navigation-overlay--sidebar {
++.monaco-workbench.phone-layout.nosidebar .part.sidebar.mobile-navigation-overlay--sidebar {
++	display: block !important;
++	visibility: visible !important;
 +	background: var(--vscode-sideBar-background);
 +	border-right: 1px solid var(--vscode-sideBar-border);
++}
++
++.monaco-workbench.phone-layout.nopanel .part.panel.mobile-navigation-overlay--panel {
++	display: block !important;
++	visibility: visible !important;
++	background: var(--vscode-panel-background);
++	border-top: 1px solid var(--vscode-panel-border);
 +}
 +
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/style.ts
@@ -769,7 +778,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,213 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -786,6 +795,13 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +const OVERLAY_CLASS = 'mobile-navigation-overlay';
 +const BACKDROP_CLASS = 'mobile-navigation-backdrop';
 +const HISTORY_STATE_KEY = 'vscodeMobileNavigation';
++
++interface IOverlayGeometry {
++	readonly top: number;
++	readonly left: number;
++	readonly width: number;
++	readonly height: number;
++}
 +
 +/** Presents existing workbench parts above the editor without changing grid visibility. */
 +export class MobileNavigationOverlayController extends Disposable {
@@ -855,9 +871,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		}
 +
 +		const bounds = this.getOverlayBounds();
-+		const width = getOverlayWidth(this.activePart, bounds.width);
-+		this.setOverlayGeometry(this.activeHost, bounds, width);
-+		this.getPart(this.activePart).layout(width, bounds.height, bounds.top, bounds.left);
++		const geometry = getOverlayGeometry(this.activePart, bounds);
++		this.setOverlayGeometry(this.activeHost, bounds, geometry);
++		this.getPart(this.activePart).layout(geometry.width, geometry.height, geometry.top, geometry.left);
 +	}
 +
 +	private createBackdrop(): HTMLElement {
@@ -900,11 +916,11 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		element.setAttribute('role', 'dialog');
 +	}
 +
-+	private setOverlayGeometry(host: HTMLElement, bounds: DOMRect, width: number): void {
-+		host.style.setProperty('--mobile-navigation-left', `${bounds.left}px`);
-+		host.style.setProperty('--mobile-navigation-top', `${bounds.top}px`);
-+		host.style.setProperty('--mobile-navigation-width', `${width}px`);
-+		host.style.setProperty('--mobile-navigation-height', `${bounds.height}px`);
++	private setOverlayGeometry(host: HTMLElement, bounds: DOMRect, geometry: IOverlayGeometry): void {
++		host.style.setProperty('--mobile-navigation-left', `${geometry.left}px`);
++		host.style.setProperty('--mobile-navigation-top', `${geometry.top}px`);
++		host.style.setProperty('--mobile-navigation-width', `${geometry.width}px`);
++		host.style.setProperty('--mobile-navigation-height', `${geometry.height}px`);
 +		this.backdrop.style.setProperty('--mobile-navigation-left', `${bounds.left}px`);
 +		this.backdrop.style.setProperty('--mobile-navigation-top', `${bounds.top}px`);
 +		this.backdrop.style.setProperty('--mobile-navigation-width', `${bounds.width}px`);
@@ -963,12 +979,18 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	return part === Parts.SIDEBAR_PART ? 'mobile-navigation-overlay--sidebar' : 'mobile-navigation-overlay--panel';
 +}
 +
-+function getOverlayWidth(part: Parts, availableWidth: number): number {
++function getOverlayGeometry(part: Parts, bounds: DOMRect): IOverlayGeometry {
 +	if (part === Parts.PANEL_PART) {
-+		return availableWidth;
++		const height = Math.min(480, Math.floor(bounds.height * 0.6));
++		return { top: bounds.bottom - height, left: bounds.left, width: bounds.width, height };
 +	}
 +
-+	return Math.min(360, Math.floor(availableWidth * 0.9));
++	return {
++		top: bounds.top,
++		left: bounds.left,
++		width: Math.min(360, Math.floor(bounds.width * 0.9)),
++		height: bounds.height
++	};
 +}
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
 ===================================================================
