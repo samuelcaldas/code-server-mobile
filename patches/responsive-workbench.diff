@@ -802,7 +802,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,242 @@
+@@ -0,0 +1,263 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -819,6 +819,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +const OVERLAY_CLASS = 'mobile-navigation-overlay';
 +const BACKDROP_CLASS = 'mobile-navigation-backdrop';
 +const HISTORY_STATE_KEY = 'vscodeMobileNavigation';
++const ESCAPE_PRIORITY_SELECTORS = [
++	'.quick-input-widget',
++	'.monaco-dialog-modal-block',
++	'.monaco-modal-editor-block',
++	'.context-view'
++];
 +
 +interface IOverlayGeometry {
 +	readonly top: number;
@@ -927,6 +933,10 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +			return;
 +		}
 +
++		if (hasHigherPriorityOverlay()) {
++			return;
++		}
++
 +		event.preventDefault();
 +		event.stopPropagation();
 +		this.onDidRequestClose(true);
@@ -1013,6 +1023,17 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		this.historyId++;
 +		mainWindow.history.pushState({ [HISTORY_STATE_KEY]: this.historyId, part }, '');
 +	}
++}
++
++function hasHigherPriorityOverlay(): boolean {
++	return ESCAPE_PRIORITY_SELECTORS.some(selector =>
++		Array.from(mainWindow.document.querySelectorAll<HTMLElement>(selector)).some(isDisplayed)
++	);
++}
++
++function isDisplayed(element: HTMLElement): boolean {
++	const style = mainWindow.getComputedStyle(element);
++	return element.getClientRects().length > 0 && style.display !== 'none' && style.visibility !== 'hidden';
 +}
 +
 +function getElementsWithRole(role: string | null): HTMLElement[] {
