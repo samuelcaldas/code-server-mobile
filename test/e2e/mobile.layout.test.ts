@@ -217,4 +217,23 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await expect(page.locator(".mobile-navigation-backdrop")).toBeVisible()
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
+
+  test("should open the panel as a bottom sheet", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const editor = page.locator("#workbench\\.parts\\.editor")
+    const panelToggle = page.getByRole("button", { name: /Toggle Panel/ })
+
+    const editorBoundsBefore = await editor.boundingBox()
+    expect(editorBoundsBefore).not.toBeNull()
+
+    await panelToggle.tap()
+
+    const panel = page.locator(".mobile-navigation-overlay--panel")
+    await expect(panel).toBeVisible()
+    const panelBounds = await panel.boundingBox()
+    expect(panelBounds).not.toBeNull()
+    expect(panelBounds!.height).toBeLessThan(editorBoundsBefore!.height)
+    expect(panelBounds!.y + panelBounds!.height).toBe(editorBoundsBefore!.y + editorBoundsBefore!.height)
+    expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
+  })
 })
