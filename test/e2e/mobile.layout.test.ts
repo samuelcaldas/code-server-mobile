@@ -200,6 +200,49 @@ describe("mobile layout maximized auxiliary bar", ["--disable-workspace-trust"],
   })
 })
 
+describe("mobile editor state transitions", ["--disable-workspace-trust"], {}, () => {
+  test("should preserve unsaved content, cursor, and scroll through DeX transitions", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const workbench = page.locator("div.monaco-workbench")
+    const editorInput = page.getByRole("textbox", { name: /Untitled-1/ })
+    const firstRenderedLine = page.locator(".monaco-editor.focused .view-lines .view-line").first()
+    const cursorStatus = page.locator('[id="status.editor.selection"]')
+    const content = Array.from({ length: 120 }, (_, index) =>
+      `line-${String(index + 1).padStart(3, "0")}${index === 80 ? " MOBILE_UNSAVED_MARKER" : ""}`,
+    ).join("\n")
+
+    await codeServerPage.navigateMenus(["File", "New Text File"])
+    await codeServerPage.waitForTab("Untitled-1")
+    await editorInput.focus()
+    await expect(editorInput).toBeFocused()
+    await page.keyboard.press("ControlOrMeta+A")
+    await page.keyboard.insertText(content)
+    await page.keyboard.press("ControlOrMeta+Home")
+    for (let line = 1; line < 81; line++) {
+      await page.keyboard.press("ArrowDown")
+    }
+    await page.keyboard.press("End")
+
+    const dirtyTab = page.locator('.tabs-container [role="tab"]', { hasText: "Untitled-1" })
+    await expect(dirtyTab).toHaveClass(/dirty/)
+    await expect(page.locator(".view-line", { hasText: "MOBILE_UNSAVED_MARKER" })).toBeVisible()
+    await expect(cursorStatus).toContainText("Ln 81")
+    const cursorBefore = await cursorStatus.textContent()
+    const firstRenderedLineBefore = await firstRenderedLine.textContent()
+    expect(firstRenderedLineBefore).not.toContain("line-001")
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(workbench).not.toHaveClass(/phone-layout/)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(workbench).toHaveClass(/phone-layout/)
+
+    await expect(dirtyTab).toHaveClass(/dirty/)
+    await expect(page.locator(".view-line", { hasText: "MOBILE_UNSAVED_MARKER" })).toBeVisible()
+    expect(await cursorStatus.textContent()).toBe(cursorBefore)
+    expect(await firstRenderedLine.textContent()).toBe(firstRenderedLineBefore)
+  })
+})
+
 describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => {
   test("should open Explorer without resizing the editor", async ({ codeServerPage }) => {
     const page = codeServerPage.page
