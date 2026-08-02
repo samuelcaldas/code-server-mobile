@@ -95,19 +95,20 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	private getDefaultLayoutViews(environmentService: IBrowserWorkbenchEnvironmentService, storageService: IStorageService): string[] | undefined {
  		const defaultLayout = environmentService.options?.defaultLayout;
  		if (!defaultLayout) {
-@@ -1672,6 +1702,11 @@ export abstract class Layout extends Dis
+@@ -1672,6 +1702,12 @@ export abstract class Layout extends Dis
  		this.mainContainer.setAttribute('role', 'application');
  		this.workbenchGrid = workbenchGrid;
  		this.workbenchGrid.edgeSnapping = this.state.runtime.mainWindowFullscreen;
 +		this.mobileNavigationOverlay = this._register(new MobileNavigationOverlayController(
 +			this.mainContainer,
 +			part => this.getPart(part),
-+			() => editorPart.getContainer()?.getBoundingClientRect() ?? this.mainContainer.getBoundingClientRect()
++			() => editorPart.getContainer()?.getBoundingClientRect() ?? this.mainContainer.getBoundingClientRect(),
++			updateHistory => this.closeMobileNavigationOverlay(undefined, updateHistory)
 +		));
  
  		for (const part of [titleBar, editorPart, activityBar, panelPart, sideBar, statusBar, auxiliaryBarPart, bannerPart]) {
  			this._register(part.onDidVisibilityChange(visible => {
-@@ -1721,7 +1756,7 @@ export abstract class Layout extends Dis
+@@ -1721,7 +1757,7 @@ export abstract class Layout extends Dis
  				: this.workbenchGrid.getViewSize(this.auxiliaryBarPartView).width;
  			this.stateModel.setInitializationValue(LayoutStateKeys.AUXILIARYBAR_SIZE, auxiliaryBarSize as number);
  
@@ -116,7 +117,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  		}));
  
  		this._register(Event.any(this.paneCompositeService.onDidPaneCompositeOpen, this.paneCompositeService.onDidPaneCompositeClose)(() => {
-@@ -1741,10 +1776,13 @@ export abstract class Layout extends Dis
+@@ -1741,10 +1777,13 @@ export abstract class Layout extends Dis
  
  			this.logService.trace(`Layout#layout, height: ${this._mainContainerDimension.height}, width: ${this._mainContainerDimension.width}`);
  
@@ -130,7 +131,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			this.initialized = true;
  
  			// Emit as event
-@@ -1752,6 +1790,87 @@ export abstract class Layout extends Dis
+@@ -1752,6 +1791,87 @@ export abstract class Layout extends Dis
  		}
  	}
  
@@ -218,7 +219,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	isMainEditorLayoutCentered(): boolean {
  		return this.stateModel.getRuntimeValue(LayoutStateKeys.MAIN_EDITOR_CENTERED);
  	}
-@@ -1906,6 +2025,7 @@ export abstract class Layout extends Dis
+@@ -1906,6 +2026,7 @@ export abstract class Layout extends Dis
  
  	getLayoutClasses(): string[] {
  		return coalesce([
@@ -226,7 +227,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			!this.isVisible(Parts.SIDEBAR_PART) ? LayoutClasses.SIDEBAR_HIDDEN : undefined,
  			!this.isVisible(Parts.EDITOR_PART, mainWindow) ? LayoutClasses.MAIN_EDITOR_AREA_HIDDEN : undefined,
  			!this.isVisible(Parts.PANEL_PART) ? LayoutClasses.PANEL_HIDDEN : undefined,
-@@ -2304,7 +2424,31 @@ export abstract class Layout extends Dis
+@@ -2304,7 +2425,54 @@ export abstract class Layout extends Dis
  		}
  	}
  
@@ -235,15 +236,38 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +			return false;
 +		}
 +
++		if (!this.isMobileNavigationOverlay(part)) {
++			this.closeMobileNavigationOverlay();
++		}
++
 +		return this.mobileNavigationOverlay?.show(part) ?? false;
 +	}
 +
-+	closeMobileNavigationOverlay(part?: Parts): boolean {
-+		return this.mobileNavigationOverlay?.close(part) ?? false;
++	closeMobileNavigationOverlay(part?: Parts, updateHistory = true): boolean {
++		const overlayPart = part ?? this.getActiveMobileNavigationPart();
++		if (!overlayPart || !this.mobileNavigationOverlay?.close(overlayPart, updateHistory)) {
++			return false;
++		}
++
++		const location = overlayPart === Parts.SIDEBAR_PART ? ViewContainerLocation.Sidebar : ViewContainerLocation.Panel;
++		this.paneCompositeService.hideActivePaneComposite(location);
++		return true;
 +	}
 +
 +	isMobileNavigationOverlay(part: Parts): boolean {
 +		return this.mobileNavigationOverlay?.isActive(part) ?? false;
++	}
++
++	private getActiveMobileNavigationPart(): Parts | undefined {
++		if (this.isMobileNavigationOverlay(Parts.SIDEBAR_PART)) {
++			return Parts.SIDEBAR_PART;
++		}
++
++		if (this.isMobileNavigationOverlay(Parts.PANEL_PART)) {
++			return Parts.PANEL_PART;
++		}
++
++		return undefined;
 +	}
 +
  	setPartHidden(hidden: boolean, part: Parts): void {
@@ -258,7 +282,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  		switch (part) {
  			case Parts.ACTIVITYBAR_PART:
  				return this.setActivityBarHidden(hidden);
-@@ -3120,22 +3264,50 @@ class LayoutStateModel extends Disposabl
+@@ -3120,22 +3288,50 @@ class LayoutStateModel extends Disposabl
  		this.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, value);
  	}
  
@@ -319,7 +343,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	}
  
  	getInitializationValue<T extends StorageKeyType>(key: InitializationStateKey<T>): T {
-@@ -3195,9 +3367,9 @@ class LayoutStateModel extends Disposabl
+@@ -3195,9 +3391,9 @@ class LayoutStateModel extends Disposabl
  		this._onDidChangeState.fire({ key, value });
  	}
  
@@ -778,7 +802,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,213 @@
+@@ -0,0 +1,214 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -817,7 +841,8 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	constructor(
 +		private readonly container: HTMLElement,
 +		private readonly getPart: (part: Parts) => Part,
-+		private readonly getOverlayBounds: () => DOMRect
++		private readonly getOverlayBounds: () => DOMRect,
++		private readonly onDidRequestClose: (updateHistory: boolean) => void
 +	) {
 +		super();
 +		this.backdrop = this.createBackdrop();
@@ -852,12 +877,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		return true;
 +	}
 +
-+	close(part?: Parts): boolean {
++	close(part?: Parts, updateHistory = true): boolean {
 +		if (!this.activePart || part && this.activePart !== part) {
 +			return false;
 +		}
 +
-+		this.closeActiveOverlay(true);
++		this.closeActiveOverlay(updateHistory);
 +		return true;
 +	}
 +
@@ -885,8 +910,8 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +
 +	private registerListeners(): void {
 +		this.backdropDisposables.add(Gesture.addTarget(this.backdrop));
-+		this.backdropDisposables.add(addDisposableListener(this.backdrop, GestureEventType.Tap, () => this.close()));
-+		this.backdropDisposables.add(addDisposableListener(this.backdrop, EventType.CLICK, () => this.close()));
++		this.backdropDisposables.add(addDisposableListener(this.backdrop, GestureEventType.Tap, () => this.onDidRequestClose(true)));
++		this.backdropDisposables.add(addDisposableListener(this.backdrop, EventType.CLICK, () => this.onDidRequestClose(true)));
 +		this._register(addDisposableListener(mainWindow, EventType.KEY_DOWN, event => this.onKeyDown(event)));
 +		this._register(addDisposableListener(mainWindow, 'popstate', () => this.onPopState()));
 +	}
@@ -897,7 +922,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		}
 +
 +		event.preventDefault();
-+		this.close();
++		this.onDidRequestClose(true);
 +	}
 +
 +	private onPopState(): void {
@@ -906,7 +931,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +			return;
 +		}
 +
-+		this.closeActiveOverlay(false);
++		this.onDidRequestClose(false);
 +	}
 +
 +	private applyOverlayClasses(element: HTMLElement, host: HTMLElement, part: Parts): void {
@@ -996,7 +1021,18 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneComposit
 ===================================================================
 --- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
-@@ -580,7 +580,9 @@ export abstract class AbstractPaneCompos
+@@ -222,6 +222,10 @@ export abstract class AbstractPaneCompos
+ 		}
+ 	}
+ 
++	protected override shouldPersistActiveComposite(): boolean {
++		return !this.layoutService.isMobileNavigationOverlay(this.partId);
++	}
++
+ 	protected override showComposite(composite: Composite): void {
+ 		super.showComposite(composite);
+ 		this.layoutCompositeBar();
+@@ -580,7 +584,9 @@ export abstract class AbstractPaneCompos
  	}
  
  	hideActivePaneComposite(): void {
@@ -1007,7 +1043,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneComposit
  			this.layoutService.setPartHidden(true, this.partId);
  		}
  
-@@ -592,7 +594,7 @@ export abstract class AbstractPaneCompos
+@@ -592,7 +598,7 @@ export abstract class AbstractPaneCompos
  	}
  
  	override layout(width: number, height: number, top: number, left: number): void {
@@ -1069,3 +1105,42 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/test/browser/workbenchTest
  	async setPartHidden(_hidden: boolean, part: Parts): Promise<void> { }
  	isSecondarySideBarVisible(): boolean { return false; }
  	toggleSecondarySideBar(): void { }
+Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/compositePart.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/parts/compositePart.ts
++++ code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/compositePart.ts
+@@ -214,21 +214,25 @@ export abstract class CompositePart<T ex
+ 		throw new Error(`Unable to find composite with id ${id}`);
+ 	}
+ 
++	protected shouldPersistActiveComposite(): boolean {
++		return true;
++	}
++
+ 	protected showComposite(composite: Composite): void {
+ 
+ 		// Remember Composite
+ 		this.activeComposite = composite;
+ 
+-		// Store in preferences
+-		const id = this.activeComposite.getId();
+-		if (id !== this.defaultCompositeId) {
+-			this.storageService.store(this.activeCompositeSettingsKey, id, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+-		} else {
+-			this.storageService.remove(this.activeCompositeSettingsKey, StorageScope.WORKSPACE);
+-		}
++		if (this.shouldPersistActiveComposite()) {
++			const id = this.activeComposite.getId();
++			if (id !== this.defaultCompositeId) {
++				this.storageService.store(this.activeCompositeSettingsKey, id, StorageScope.WORKSPACE, StorageTarget.MACHINE);
++			} else {
++				this.storageService.remove(this.activeCompositeSettingsKey, StorageScope.WORKSPACE);
++			}
+ 
+-		// Remember
+-		this.lastActiveCompositeId = this.activeComposite.getId();
++			this.lastActiveCompositeId = id;
++		}
+ 
+ 		// Composites created for the first time
+ 		let compositeContainer = this.mapCompositeToCompositeContainer.get(composite.getId());
