@@ -422,7 +422,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,198 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -521,22 +521,45 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +
 +/*
 + * Go Back / Go Forward duplicate browser history and rarely have anywhere
-+ * useful to go from a single-pane phone session. Keep the Command Center
-+ * down to the one thing that is useful here: the search / quick-open pill.
++ * useful to go from a single-pane phone session.
 + */
-+.monaco-workbench.phone-layout .part.titlebar .command-center > .monaco-toolbar > .monaco-action-bar > .actions-container > .action-item:not(.command-center-center) {
++.monaco-workbench.phone-layout .part.titlebar .command-center .action-item:has(.action-label.codicon-arrow-left),
++.monaco-workbench.phone-layout .part.titlebar .command-center .action-item:has(.action-label.codicon-arrow-right) {
 +	display: none;
 +}
 +
 +/*
-+ * The layout-control cluster (primary/secondary side bar and panel toggles,
-+ * plus the "Configure Layout" dropdown) assumes the desktop split-view
-+ * mental model. On phone, the side bar, panel, and auxiliary bar are
-+ * overlay-only and already opened from the activity bar, so a title-bar
-+ * toggle for them has no matching target to act on.
++ * The app menu (titlebar-left) and the window/global actions toolbar
++ * (titlebar-right — layout-control cluster, "Configure Layout" dropdown,
++ * editor actions) assume desktop's split-view mental model and a title bar
++ * wide enough for a menu strip plus a row of toggles. On phone, the side
++ * bar, panel, and auxiliary bar are overlay-only and already opened from
++ * the activity bar, so neither cluster has a matching target to act on;
++ * Command Center (which also hosts Agent Status, see
++ * agentTitleBarStatusWidget.ts) is what's left, and gets the full row.
 + */
-+.monaco-workbench.phone-layout .part.titlebar .action-toolbar-container .action-item:has(.action-label[class*="codicon-layout"]) {
++.monaco-workbench.phone-layout .part.titlebar .titlebar-container.has-center > .titlebar-left,
++.monaco-workbench.phone-layout .part.titlebar .titlebar-container.has-center > .titlebar-right {
 +	display: none;
++}
++
++.monaco-workbench.phone-layout .part.titlebar .titlebar-container.has-center > .titlebar-center {
++	width: 100%;
++	max-width: none;
++	flex-grow: 1;
++	margin: 0;
++}
++
++.monaco-workbench.phone-layout .part.titlebar .titlebar-container.has-center > .titlebar-center > .window-title {
++	flex: 1 1 auto;
++	max-width: none;
++	margin: 0;
++}
++
++.monaco-workbench.phone-layout .part.titlebar .command-center .action-item.command-center-center {
++	width: auto;
++	max-width: none;
++	margin: 0 8px;
 +}
 +
 +/* ---- Phone Layout: Navigation Overlays ---- */
