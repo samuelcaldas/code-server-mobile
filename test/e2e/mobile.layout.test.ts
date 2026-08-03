@@ -48,6 +48,24 @@ describe("mobile layout", ["--disable-workspace-trust"], {}, () => {
     expect(box!.width).toBeGreaterThanOrEqual(44)
   })
 
+  test("should show only the Command Center in the phone titlebar, full width", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    await expect(page.locator("div.monaco-workbench")).toHaveClass(/phone-layout/)
+
+    const titlebar = page.locator(".part.titlebar .titlebar-container")
+    await expect(titlebar.locator("> .titlebar-left")).toBeHidden()
+    await expect(titlebar.locator("> .titlebar-right")).toBeHidden()
+
+    const commandCenter = titlebar.locator("> .titlebar-center")
+    await expect(commandCenter).toBeVisible()
+
+    const titlebarBounds = await titlebar.boundingBox()
+    const commandCenterBounds = await commandCenter.boundingBox()
+    expect(titlebarBounds).not.toBeNull()
+    expect(commandCenterBounds).not.toBeNull()
+    expect(commandCenterBounds!.width).toBeGreaterThan(titlebarBounds!.width * 0.9)
+  })
+
   test("should keep compact layout through rotation and restore it for DeX", async ({ codeServerPage }) => {
     const workbench = codeServerPage.page.locator("div.monaco-workbench")
     const sidebar = codeServerPage.page.locator(".part.sidebar")
@@ -265,10 +283,9 @@ describe("mobile editor state transitions", ["--disable-workspace-trust"], {}, (
 })
 
 describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => {
-  test("should expose touch-sized menu, tab close, and panel controls", async ({ codeServerPage }) => {
+  test("should expose touch-sized menu and tab close controls", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const applicationMenu = page.getByRole("menuitem", { name: "Application Menu" })
-    const panelToggle = page.getByRole("button", { name: /Toggle Panel/ })
     const explorer = page.getByRole("tab", { name: /Explorer/ })
 
     await explorer.tap()
@@ -278,7 +295,6 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
 
     const touchTargets = [
       ["Application Menu", applicationMenu],
-      ["Toggle Panel", panelToggle],
       ["Close Tab", closeTab],
     ] as const
     for (const [name, target] of touchTargets) {
@@ -378,12 +394,11 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
   test("should open the panel as a bottom sheet", async ({ codeServerPage }) => {
     const page = codeServerPage.page
     const editor = page.locator("#workbench\\.parts\\.editor")
-    const panelToggle = page.getByRole("button", { name: /Toggle Panel/ })
 
     const editorBoundsBefore = await editor.boundingBox()
     expect(editorBoundsBefore).not.toBeNull()
 
-    await panelToggle.tap()
+    await codeServerPage.executeCommandViaMenus("View: Toggle Panel Visibility")
 
     const panel = page.locator(".mobile-navigation-overlay--panel")
     await expect(panel).toBeVisible()
