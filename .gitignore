@@ -22,3 +22,6 @@ test/test-results
 # Quilt's internal data.
 /.pc
 /patches/*.diff~
+
+# Playwright's internal data.
+.playwright-mcp/
