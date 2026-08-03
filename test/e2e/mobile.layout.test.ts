@@ -154,22 +154,29 @@ describe("mobile layout hidden maximized panel", ["--disable-workspace-trust"], 
     const panel = page.locator(".part.panel")
 
     await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(workbench).not.toHaveClass(/phone-layout/)
     if (await panel.isHidden()) {
       await page.keyboard.press("ControlOrMeta+J")
+      await expect(panel).toBeVisible()
     }
     if (await editor.isHidden()) {
       await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+      await expect(editor).toBeVisible()
     }
     await codeServerPage.executeCommandViaMenus("View: Toggle Maximized Panel")
+    await expect(panel).toBeVisible()
     await expect(editor).toBeHidden()
     await page.keyboard.press("ControlOrMeta+J")
     await expect(panel).toBeHidden()
+    await expect(panel).not.toHaveAttribute("data-active-composite", /.+/)
     await expect(editor).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(workbench).toHaveClass(/phone-layout/)
     await page.setViewportSize({ width: 1280, height: 800 })
     await expect(workbench).not.toHaveClass(/phone-layout/)
+    await expect(panel).toBeHidden()
+    await expect(editor).toBeVisible()
     await page.keyboard.press("ControlOrMeta+J")
 
     await expect(editor).toBeHidden()
@@ -363,7 +370,7 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await expect(auxiliaryBar).toBeVisible()
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
 
-    await codeServerPage.executeCommandViaMenus("View: Toggle Secondary Side Bar Visibility")
+    await page.keyboard.press("Escape")
     await expect(auxiliaryBar).toBeHidden()
     expect(await editor.boundingBox()).toEqual(editorBoundsBefore)
   })
