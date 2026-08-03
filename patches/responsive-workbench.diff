@@ -422,7 +422,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,256 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -619,6 +619,64 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +	visibility: visible !important;
 +	background: var(--vscode-sideBar-background);
 +	border-left: 1px solid var(--vscode-sideBar-border);
++}
++
++/* ---- Phone Layout: Menus ---- */
++
++/*
++ * All menus (Application Menu, every right-click/kebab context menu, every
++ * "..." dropdown) share one widget: `Menu` in
++ * vs/base/browser/ui/menu/menu.ts. On phone, `Menu` marks its own container
++ * `.mobile-menu-shell` instead of using the desktop floating-panel position;
++ * this turns that shell into a full-screen "screen" above the navigation
++ * overlays (z-index 2521 / 2522). Nested submenus are separate `Menu`
++ * instances that reuse the same class, so a submenu shell — deeper in the
++ * DOM, same fixed full-screen box — naturally paints over its parent,
++ * giving one screen at a time without extra show/hide bookkeeping.
++ */
++.monaco-workbench.phone-layout .mobile-menu-shell {
++	position: fixed !important;
++	top: 0 !important;
++	left: 0 !important;
++	width: 100% !important;
++	height: var(--vscode-visible-viewport-height, 100dvh) !important;
++	max-width: none !important;
++	max-height: none !important;
++	z-index: 2523 !important;
++	display: flex !important;
++	flex-direction: column !important;
++	background: var(--vscode-menu-background);
++}
++
++.monaco-workbench.phone-layout .mobile-menu-shell > .monaco-scrollable-element {
++	flex: 1 1 auto;
++	min-height: 0;
++}
++
++.monaco-workbench.phone-layout .mobile-menu-shell .monaco-menu {
++	width: 100%;
++	max-height: none !important;
++}
++
++.monaco-workbench.phone-layout .mobile-menu-header {
++	display: flex;
++	flex: 0 0 auto;
++	align-items: center;
++	min-height: 44px;
++	border-bottom: 1px solid var(--vscode-menu-separatorBackground);
++}
++
++.monaco-workbench.phone-layout .mobile-menu-header-action {
++	display: flex;
++	align-items: center;
++	justify-content: center;
++	min-height: 44px;
++	min-width: 44px;
++	padding: 0 12px;
++	color: var(--vscode-menu-foreground);
++	background: transparent;
++	border: none;
++	touch-action: manipulation;
 +}
 +
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/style.ts
@@ -925,7 +983,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,451 @@
+@@ -0,0 +1,452 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -947,7 +1005,8 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	'.quick-input-widget',
 +	'.monaco-dialog-modal-block',
 +	'.monaco-modal-editor-block',
-+	'.context-view'
++	'.context-view',
++	'.mobile-menu-shell'
 +];
 +const FOCUSABLE_SELECTOR = [
 +	'a[href]',
@@ -1858,3 +1917,190 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/visibleViewport.ts
 +function getBottom(bounds: IViewportBounds): number {
 +	return bounds.top + bounds.height;
 +}
+Index: code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
++++ code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
+@@ -3,6 +3,7 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 
++import { localize } from '../../../../nls.js';
+ import { isFirefox } from '../../browser.js';
+ import { EventType as TouchEventType, Gesture } from '../../touch.js';
+ import { $, addDisposableListener, append, clearNode, Dimension, EventHelper, EventLike, EventType, getActiveElement, getWindow, IDomNodePagePosition, isAncestor, isInShadowDOM } from '../../dom.js';
+@@ -106,6 +107,8 @@ export class Menu extends ActionBar {
+ 	constructor(container: HTMLElement, actions: ReadonlyArray<IAction>, options: IMenuOptions, private readonly menuStyles: IMenuStyles) {
+ 		container.classList.add('monaco-menu-container');
+ 		container.setAttribute('role', 'presentation');
++		const isPhoneMenu = !!container.closest('.phone-layout');
++		const isSubmenuLevel = container.classList.contains('monaco-submenu');
+ 		const menuElement = document.createElement('div');
+ 		menuElement.classList.add('monaco-menu');
+ 		menuElement.setAttribute('role', 'presentation');
+@@ -245,7 +248,7 @@ export class Menu extends ActionBar {
+ 			alwaysConsumeMouseWheel: true,
+ 			horizontal: ScrollbarVisibility.Hidden,
+ 			vertical: ScrollbarVisibility.Visible,
+-			verticalScrollbarSize: 7,
++			verticalScrollbarSize: isPhoneMenu ? 24 : 7,
+ 			handleMouseWheel: true,
+ 			useShadows: true
+ 		}));
+@@ -269,8 +272,10 @@ export class Menu extends ActionBar {
+ 			e.preventDefault();
+ 		}));
+ 
+-		const window = getWindow(container);
+-		menuElement.style.maxHeight = `${Math.max(10, window.innerHeight - container.getBoundingClientRect().top - 35)}px`;
++		if (!isPhoneMenu) {
++			const window = getWindow(container);
++			menuElement.style.maxHeight = `${Math.max(10, window.innerHeight - container.getBoundingClientRect().top - 35)}px`;
++		}
+ 
+ 		actions = actions.filter((a, idx) => {
+ 			if (options.submenuIds?.has(a.id)) {
+@@ -298,11 +303,35 @@ export class Menu extends ActionBar {
+ 		container.appendChild(this.scrollableElement.getDomNode());
+ 		this.scrollableElement.scanDomNode();
+ 
++		if (isPhoneMenu) {
++			container.classList.add('mobile-menu-shell');
++			container.insertBefore(this.createMobileMenuHeader(isSubmenuLevel), this.scrollableElement.getDomNode());
++		}
++
+ 		this.viewItems.filter(item => !(item instanceof MenuSeparatorActionViewItem)).forEach((item, index, array) => {
+ 			(item as BaseMenuActionViewItem).updatePositionInSet(index + 1, array.length);
+ 		});
+ 	}
+ 
++	private createMobileMenuHeader(isSubmenuLevel: boolean): HTMLElement {
++		const header = $('div.mobile-menu-header');
++		const icon = isSubmenuLevel ? Codicon.quickInputBack : Codicon.dialogClose;
++		const label = isSubmenuLevel ? localize('mobileMenuBack', "Back") : localize('mobileMenuClose', "Close");
++		const button = $('button.mobile-menu-header-action' + ThemeIcon.asCSSSelector(icon), { 'aria-label': label, 'title': label });
++		append(header, button);
++
++		this._register(Gesture.addTarget(button));
++		this._register(addDisposableListener(button, TouchEventType.Tap, e => this.dismissMobileMenu(e)));
++		this._register(addDisposableListener(button, EventType.CLICK, e => this.dismissMobileMenu(e)));
++
++		return header;
++	}
++
++	private dismissMobileMenu(e: EventLike): void {
++		EventHelper.stop(e, true);
++		this.domNode.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true }));
++	}
++
+ 	private initializeOrUpdateStyleSheet(container: HTMLElement, style: IMenuStyles): void {
+ 		if (!this.styleSheet) {
+ 			if (isInShadowDOM(container)) {
+@@ -828,6 +857,16 @@ class SubmenuMenuActionViewItem extends
+ 	}
+ 
+ 	override onClick(e: EventLike): void {
++		// Ignore this click if a nested target (e.g. the phone-mode menu's own
++		// Back button, which is a DOM descendant of this item's `<li>`) already
++		// handled the same touch tap. `Gesture` re-dispatches a single tap to
++		// every registered ancestor target regardless of `stopPropagation()`,
++		// so without this guard, tapping Back reopens the very submenu it just
++		// closed. `defaultPrevented` persists across those re-dispatches.
++		if ((e as unknown as globalThis.Event).defaultPrevented) {
++			return;
++		}
++
+ 		// stop clicking from trying to run an action
+ 		EventHelper.stop(e, true);
+ 
+@@ -847,6 +886,7 @@ class SubmenuMenuActionViewItem extends
+ 			this.updateAriaExpanded('false');
+ 			if (this.submenuContainer) {
+ 				this.submenuDisposables.clear();
++				this.submenuContainer.remove();
+ 				this.submenuContainer = undefined;
+ 			}
+ 		}
+@@ -979,6 +1019,7 @@ class SubmenuMenuActionViewItem extends
+ 		}
+ 
+ 		if (this.submenuContainer) {
++			this.submenuContainer.remove();
+ 			this.submenuContainer = undefined;
+ 		}
+ 	}
+Index: code-server-mobile/lib/vscode/src/vs/base/test/browser/ui/menu/menu.test.ts
+===================================================================
+--- /dev/null
++++ code-server-mobile/lib/vscode/src/vs/base/test/browser/ui/menu/menu.test.ts
+@@ -0,0 +1,70 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import assert from 'assert';
++import { Menu, unthemedMenuStyles } from '../../../../browser/ui/menu/menu.js';
++import { Action } from '../../../../common/actions.js';
++import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../common/utils.js';
++
++suite('Menu (phone-layout)', () => {
++
++	const store = ensureNoDisposablesAreLeakedInTestSuite();
++
++	function createAction(): Action {
++		return store.add(new Action('test.action', 'Test Action', undefined, true, () => { }));
++	}
++
++	function createPhoneLayoutContainer(submenu: boolean): HTMLElement {
++		const phoneAncestor = document.createElement('div');
++		phoneAncestor.className = 'monaco-workbench phone-layout';
++		const container = document.createElement('div');
++		if (submenu) {
++			container.className = 'monaco-submenu';
++		}
++		phoneAncestor.appendChild(container);
++		return container;
++	}
++
++	test('desktop container is left untouched', () => {
++		const container = document.createElement('div');
++		store.add(new Menu(container, [createAction()], {}, unthemedMenuStyles));
++
++		assert.strictEqual(container.classList.contains('mobile-menu-shell'), false);
++		assert.strictEqual(container.querySelector('.mobile-menu-header-action'), null);
++	});
++
++	test('root menu becomes a full-screen shell with a Close header', () => {
++		const container = createPhoneLayoutContainer(false);
++		store.add(new Menu(container, [createAction()], {}, unthemedMenuStyles));
++
++		assert.strictEqual(container.classList.contains('mobile-menu-shell'), true);
++		const header = container.querySelector('.mobile-menu-header-action');
++		assert(header !== null, 'Header action button not found');
++		assert.strictEqual(header.getAttribute('aria-label'), 'Close');
++	});
++
++	test('submenu container becomes a shell with a Back header', () => {
++		const container = createPhoneLayoutContainer(true);
++		store.add(new Menu(container, [createAction()], {}, unthemedMenuStyles));
++
++		const header = container.querySelector('.mobile-menu-header-action');
++		assert(header !== null, 'Header action button not found');
++		assert.strictEqual(header.getAttribute('aria-label'), 'Back');
++	});
++
++	test('header action reuses the existing onDidCancel path', () => {
++		const container = createPhoneLayoutContainer(false);
++		const menu = store.add(new Menu(container, [createAction()], {}, unthemedMenuStyles));
++
++		let cancelled = false;
++		store.add(menu.onDidCancel(() => cancelled = true));
++
++		const header = container.querySelector('.mobile-menu-header-action');
++		assert(header !== null, 'Header action button not found');
++		header.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
++
++		assert.strictEqual(cancelled, true);
++	});
++});

@@ -19,7 +19,7 @@ describe("mobile layout", ["--disable-workspace-trust"], {}, () => {
   })
 
   test("should publish visible viewport metrics without changing topology", async ({ codeServerPage }) => {
-    const metrics = await codeServerPage.page.locator("div.monaco-workbench").evaluate(element => ({
+    const metrics = await codeServerPage.page.locator("div.monaco-workbench").evaluate((element) => ({
       keyboardHeight: Number.parseFloat(element.style.getPropertyValue("--vscode-keyboard-height")),
       visibleHeight: Number.parseFloat(element.style.getPropertyValue("--vscode-visible-viewport-height")),
       visualViewportHeight: window.visualViewport?.height,
@@ -246,8 +246,9 @@ describe("mobile editor state transitions", ["--disable-workspace-trust"], {}, (
     const editorInput = page.getByRole("textbox", { name: /Untitled-1/ })
     const firstRenderedLine = page.locator(".monaco-editor.focused .view-lines .view-line").first()
     const cursorStatus = page.locator('[id="status.editor.selection"]')
-    const content = Array.from({ length: 120 }, (_, index) =>
-      `line-${String(index + 1).padStart(3, "0")}${index === 80 ? " MOBILE_UNSAVED_MARKER" : ""}`,
+    const content = Array.from(
+      { length: 120 },
+      (_, index) => `line-${String(index + 1).padStart(3, "0")}${index === 80 ? " MOBILE_UNSAVED_MARKER" : ""}`,
     ).join("\n")
 
     await codeServerPage.navigateMenus(["File", "New Text File"])
@@ -342,14 +343,18 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await expect(overlay).toBeVisible()
 
     for (const boundary of ["first", "last"] as const) {
-      await overlay.evaluate((element, { boundary, focusableSelector }) => {
-        const focusableElements = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector))
-          .filter(candidate => candidate.getClientRects().length > 0)
-        const target = boundary === "first" ? focusableElements[0] : focusableElements[focusableElements.length - 1]
-        target?.focus()
-      }, { boundary, focusableSelector })
+      await overlay.evaluate(
+        (element, { boundary, focusableSelector }) => {
+          const focusableElements = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+            (candidate) => candidate.getClientRects().length > 0,
+          )
+          const target = boundary === "first" ? focusableElements[0] : focusableElements[focusableElements.length - 1]
+          target?.focus()
+        },
+        { boundary, focusableSelector },
+      )
       await page.keyboard.press(boundary === "first" ? "Shift+Tab" : "Tab")
-      expect(await overlay.evaluate(element => element.contains(document.activeElement))).toBe(true)
+      expect(await overlay.evaluate((element) => element.contains(document.activeElement))).toBe(true)
     }
   })
 
@@ -448,7 +453,7 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     const explorer = page.getByRole("tab", { name: /Explorer/ })
     const quickInput = page.locator(".quick-input-widget")
 
-    await workbench.evaluate(element => {
+    await workbench.evaluate((element) => {
       element.style.setProperty("--vscode-visible-viewport-half-height", "200px")
     })
     await explorer.tap()
@@ -456,7 +461,7 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await page.keyboard.press("ControlOrMeta+P")
     await expect(quickInput).toBeVisible()
 
-    const listMaxHeight = await quickInput.locator(".quick-input-list .monaco-list").evaluate(element => {
+    const listMaxHeight = await quickInput.locator(".quick-input-list .monaco-list").evaluate((element) => {
       return Number.parseFloat(window.getComputedStyle(element).maxHeight)
     })
     expect(listMaxHeight).toBeLessThanOrEqual(200)
@@ -492,5 +497,98 @@ describe("mobile navigation overlays", ["--disable-workspace-trust"], {}, () => 
     await expect(workbench).not.toHaveClass(/phone-layout/)
     await expect(page.locator(".mobile-navigation-overlay--sidebar")).toBeHidden()
     await expect(explorer).toHaveAttribute("aria-selected", "true")
+  })
+})
+
+describe("mobile menu navigation", ["--disable-workspace-trust"], {}, () => {
+  test("should open the Application Menu as a full-screen screen with a Close header", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const applicationMenu = page.getByRole("menuitem", { name: "Application Menu" })
+    const shell = page.locator(".mobile-menu-shell")
+
+    await applicationMenu.tap()
+    await expect(shell).toHaveCount(1)
+
+    const viewport = page.viewportSize()
+    const bounds = await shell.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.width).toBe(viewport!.width)
+    expect(bounds!.height).toBeCloseTo(viewport!.height, 0)
+
+    const closeAction = shell.getByRole("button", { name: "Close" })
+    await expect(closeAction).toBeVisible()
+    const closeBounds = await closeAction.boundingBox()
+    expect(closeBounds).not.toBeNull()
+    expect(closeBounds!.width).toBeGreaterThanOrEqual(44)
+    expect(closeBounds!.height).toBeGreaterThanOrEqual(44)
+  })
+
+  test("should show Back when drilling into a submenu and return to the correct parent screen", async ({
+    codeServerPage,
+  }) => {
+    const page = codeServerPage.page
+    const applicationMenu = page.getByRole("menuitem", { name: "Application Menu" })
+    const shells = page.locator(".mobile-menu-shell")
+
+    await applicationMenu.tap()
+    await expect(shells).toHaveCount(1)
+    await shells.last().locator(':text-is("File")').tap()
+
+    await expect(shells).toHaveCount(2)
+    const submenu = shells.last()
+    const backAction = submenu.getByRole("button", { name: "Back" })
+    await expect(backAction).toBeVisible()
+    await expect(submenu.locator(':text-is("New Text File")')).toBeVisible()
+
+    await backAction.tap()
+    await expect(shells).toHaveCount(1)
+    await expect(shells.last().getByRole("button", { name: "Close" })).toBeVisible()
+    await expect(shells.last().locator(':text-is("File")')).toBeVisible()
+  })
+
+  test("should dismiss the entire menu chain from the root Close action", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const applicationMenu = page.getByRole("menuitem", { name: "Application Menu" })
+    const shells = page.locator(".mobile-menu-shell")
+
+    await applicationMenu.tap()
+    await shells.last().locator(':text-is("File")').tap()
+    await expect(shells).toHaveCount(2)
+
+    // Back to root first so Close is verified to dismiss the full chain, not
+    // just the top submenu screen.
+    await shells.last().getByRole("button", { name: "Back" }).tap()
+    await expect(shells).toHaveCount(1)
+
+    await shells.last().getByRole("button", { name: "Close" }).tap()
+    await expect(shells).toHaveCount(0)
+  })
+
+  test("should reach items in a long menu via touch-drag scroll", async ({ codeServerPage }) => {
+    const page = codeServerPage.page
+    const applicationMenu = page.getByRole("menuitem", { name: "Application Menu" })
+    const shells = page.locator(".mobile-menu-shell")
+
+    // Shrink well below the File submenu's natural height so its items
+    // overflow and only scrolling can reach the bottom ones.
+    await page.setViewportSize({ width: 390, height: 250 })
+    await expect(page.locator("div.monaco-workbench")).toHaveClass(/phone-layout/)
+
+    await applicationMenu.tap()
+    await shells.last().locator(':text-is("File")').tap()
+    const submenu = shells.last()
+    const lastItem = submenu.getByRole("menuitem").last()
+
+    await expect(lastItem).not.toBeInViewport()
+
+    const submenuBounds = await submenu.boundingBox()
+    expect(submenuBounds).not.toBeNull()
+    await codeServerPage.touchDragScroll(
+      submenuBounds!.x + submenuBounds!.width / 2,
+      submenuBounds!.y + submenuBounds!.height - 20,
+      -600,
+    )
+
+    await expect(lastItem).toBeInViewport()
   })
 })

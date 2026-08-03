@@ -568,6 +568,40 @@ export class CodeServerPage {
   }
 
   /**
+   * Navigate through a phone-layout full-screen menu (see `.mobile-menu-shell`
+   * in vs/base/browser/ui/menu/menu.ts) by tapping each label in turn.
+   *
+   * Unlike `navigateMenus`, phone menus render one full-screen level at a
+   * time instead of a single floating overlay, so each step retargets the
+   * topmost shell rather than a fixed container selector.
+   */
+  async navigateMobileMenus(menus: string[]): Promise<void> {
+    await this.page.getByRole("menuitem", { name: "Application Menu" }).tap()
+    for (const menu of menus) {
+      const shell = this.page.locator(".mobile-menu-shell").last()
+      await shell.locator(`:text-is("${menu}")`).tap()
+    }
+  }
+
+  /**
+   * Simulate a touch-drag scroll gesture starting at (x, y) and moving
+   * vertically by deltaY over several steps. Negative deltaY scrolls content
+   * up, revealing what is below the fold.
+   */
+  async touchDragScroll(x: number, y: number, deltaY: number): Promise<void> {
+    const client = await this.page.context().newCDPSession(this.page)
+    const steps = 10
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
+    for (let step = 1; step <= steps; step++) {
+      await client.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y: y + (deltaY * step) / steps }],
+      })
+    }
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+  }
+
+  /**
    * Execute a command in the root of the instance's workspace directory.
    */
   async exec(command: string): Promise<void> {
