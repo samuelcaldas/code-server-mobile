@@ -62,6 +62,7 @@ npm run test:e2e:proxy
 ```
 
 - `npm test` intentionally fails and directs callers to explicit suites.
+- Playwright images and artifacts folder `.playwright-mcp` must be gitignored. All screen captures must reside in `.playwright-mcp`.
 - `npm run lint:ts` and `npm run prettier` modify files. Use `npx prettier --check .` for a non-writing format check.
 - `npm run lint:scripts` lints shell scripts. `npm run fmt` also rewrites documentation TOCs.
 - For `lib/vscode`, use the smallest relevant validation. `npm run typecheck-client`, `npm run test-browser-no-install`, and `scripts/test.sh --grep <pattern>` are scope-appropriate; broad VS Code builds are expensive.
