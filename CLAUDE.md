@@ -7,6 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - The repository's primary goal is UI/UX adaptation of VS Code for smartphones and other small touch screens.
 - Treat small touch-screen usability and responsive behavior as core product constraints while preserving desktop behavior.
 
+## Environment & Infrastructure
+
+- **Dev Host / Context:** `docker-dev` remote context (builds, dev, tests).
+- **Prod Host / Context:** `docker-vm` remote context (`10.250.50.165` - Ubuntu Server).
+- **Domain & DNS:** Wildcard DNS `*.dev.timoteo.mg.gov.br` points to `docker-vm` (`10.250.50.165`).
+- **Nginx Proxy Manager (NPM):** Running on server `fs01002` (`10.250.50.60`). Configured manually (do NOT automate programmatically).
+
 ## Setup and Development
 
 - Use `npm` only. The `preinstall` script rejects Yarn.
