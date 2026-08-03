@@ -20,6 +20,8 @@ access it in the browser.
 See [requirements](https://coder.com/docs/code-server/latest/requirements) for minimum specs, as well as instructions
 on how to set up a Google VM on which you can install code-server.
 
+For infrastructure setup, host contexts (`docker-dev` / `docker-vm`), DNS, and NPM proxy guidelines, see [Infrastructure & Environment](./infrastructure.md).
+
 **TL;DR:** Linux machine with WebSockets enabled, 1 GB RAM, and 2 vCPUs
 
 ## Getting started
