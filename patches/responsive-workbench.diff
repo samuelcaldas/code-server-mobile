@@ -422,7 +422,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,175 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -515,6 +515,28 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +.monaco-workbench.phone-layout .quick-input-widget .quick-input-list .monaco-list-row,
 +.monaco-workbench.phone-layout .quick-input-widget .quick-input-tree .monaco-list-row {
 +	min-height: 44px;
++}
++
++/* ---- Phone Layout: Title Bar ---- */
++
++/*
++ * Go Back / Go Forward duplicate browser history and rarely have anywhere
++ * useful to go from a single-pane phone session. Keep the Command Center
++ * down to the one thing that is useful here: the search / quick-open pill.
++ */
++.monaco-workbench.phone-layout .part.titlebar .command-center > .monaco-toolbar > .monaco-action-bar > .actions-container > .action-item:not(.command-center-center) {
++	display: none;
++}
++
++/*
++ * The layout-control cluster (primary/secondary side bar and panel toggles,
++ * plus the "Configure Layout" dropdown) assumes the desktop split-view
++ * mental model. On phone, the side bar, panel, and auxiliary bar are
++ * overlay-only and already opened from the activity bar, so a title-bar
++ * toggle for them has no matching target to act on.
++ */
++.monaco-workbench.phone-layout .part.titlebar .action-toolbar-container .action-item:has(.action-label[class*="codicon-layout"]) {
++	display: none;
 +}
 +
 +/* ---- Phone Layout: Navigation Overlays ---- */
