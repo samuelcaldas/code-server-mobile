@@ -245,7 +245,18 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  			!this.isVisible(Parts.SIDEBAR_PART) ? LayoutClasses.SIDEBAR_HIDDEN : undefined,
  			!this.isVisible(Parts.EDITOR_PART, mainWindow) ? LayoutClasses.MAIN_EDITOR_AREA_HIDDEN : undefined,
  			!this.isVisible(Parts.PANEL_PART) ? LayoutClasses.PANEL_HIDDEN : undefined,
-@@ -2304,7 +2436,54 @@ export abstract class Layout extends Dis
+@@ -2153,6 +2285,10 @@ export abstract class Layout extends Dis
+ 	}
+ 
+ 	setAuxiliaryBarMaximized(maximized: boolean): boolean {
++		if (maximized && this.viewportPolicy.isPhoneLayout.get()) {
++			return this.tryShowMobileNavigationOverlay(Parts.AUXILIARYBAR_PART);
++		}
++
+ 		if (
+ 			this.inMaximizedAuxiliaryBarTransition ||		// prevent re-entrance
+ 			(maximized === this.isAuxiliaryBarMaximized())	// return early if state is already present
+@@ -2304,7 +2440,61 @@ export abstract class Layout extends Dis
  		}
  	}
  
@@ -263,12 +274,15 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +
 +	closeMobileNavigationOverlay(part?: Parts, shouldRestoreFocus = true, updateHistory = true): boolean {
 +		const overlayPart = part ?? this.getActiveMobileNavigationPart();
-+		if (!overlayPart || !this.mobileNavigationOverlay?.close(overlayPart, updateHistory, shouldRestoreFocus)) {
++		const restoreFocus = overlayPart ? this.mobileNavigationOverlay?.close(overlayPart, updateHistory) : undefined;
++		if (!overlayPart || !restoreFocus) {
 +			return false;
 +		}
 +
-+		const location = overlayPart === Parts.SIDEBAR_PART ? ViewContainerLocation.Sidebar : ViewContainerLocation.Panel;
-+		this.paneCompositeService.hideActivePaneComposite(location);
++		this.paneCompositeService.hideActivePaneComposite(getViewContainerLocation(overlayPart));
++		if (shouldRestoreFocus) {
++			restoreFocus();
++		}
 +		return true;
 +	}
 +
@@ -283,6 +297,10 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +
 +		if (this.isMobileNavigationOverlay(Parts.PANEL_PART)) {
 +			return Parts.PANEL_PART;
++		}
++
++		if (this.isMobileNavigationOverlay(Parts.AUXILIARYBAR_PART)) {
++			return Parts.AUXILIARYBAR_PART;
 +		}
 +
 +		return undefined;
@@ -300,7 +318,33 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  		switch (part) {
  			case Parts.ACTIVITYBAR_PART:
  				return this.setActivityBarHidden(hidden);
-@@ -3120,22 +3299,50 @@ class LayoutStateModel extends Disposabl
+@@ -2330,7 +2520,7 @@ export abstract class Layout extends Dis
+ 	}
+ 
+ 	isSecondarySideBarVisible(): boolean {
+-		return this.isVisible(Parts.AUXILIARYBAR_PART);
++		return this.isVisible(Parts.AUXILIARYBAR_PART) || this.isMobileNavigationOverlay(Parts.AUXILIARYBAR_PART);
+ 	}
+ 
+ 	hasMainWindowBorder(): boolean {
+@@ -2779,6 +2969,16 @@ export abstract class Layout extends Dis
+ 	}
+ }
+ 
++function getViewContainerLocation(part: Parts): ViewContainerLocation {
++	if (part === Parts.SIDEBAR_PART) {
++		return ViewContainerLocation.Sidebar;
++	}
++	if (part === Parts.AUXILIARYBAR_PART) {
++		return ViewContainerLocation.AuxiliaryBar;
++	}
++	return ViewContainerLocation.Panel;
++}
++
+ type ZenModeConfiguration = {
+ 	centerLayout: boolean;
+ 	fullScreen: boolean;
+@@ -3120,22 +3320,50 @@ class LayoutStateModel extends Disposabl
  		this.setRuntimeValue(LayoutStateKeys.AUXILIARYBAR_HIDDEN, value);
  	}
  
@@ -332,7 +376,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +	private shouldSaveStateKey(stateKey: WorkbenchLayoutStateKey<StorageKeyType>, workspace: boolean, global: boolean, isZenMode: boolean): boolean {
 +		if (!((workspace && stateKey.scope === StorageScope.WORKSPACE) || (global && stateKey.scope === StorageScope.PROFILE))) {
 +			return false;
- 		}
++		}
 +
 +		return !isZenMode || !(stateKey instanceof RuntimeStateKey && stateKey.zenModeIgnore);
 +	}
@@ -349,7 +393,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
 +	private saveDesktopLayoutState(workspace: boolean, desktopLayoutState?: IDesktopLayoutState): void {
 +		if (!workspace || !desktopLayoutState) {
 +			return;
-+		}
+ 		}
 +
 +		const visibility = desktopLayoutState.partVisibility;
 +		this.saveKeyToStorage(LayoutStateKeys.SIDEBAR_HIDDEN, !visibility.sidebar);
@@ -361,7 +405,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/layout.ts
  	}
  
  	getInitializationValue<T extends StorageKeyType>(key: InitializationStateKey<T>): T {
-@@ -3195,9 +3402,9 @@ class LayoutStateModel extends Disposabl
+@@ -3195,9 +3423,9 @@ class LayoutStateModel extends Disposabl
  		this._onDidChangeState.fire({ key, value });
  	}
  
@@ -378,7 +422,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,153 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -522,6 +566,14 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +	visibility: visible !important;
 +	background: var(--vscode-panel-background);
 +	border-top: 1px solid var(--vscode-panel-border);
++}
++
++.monaco-workbench.phone-layout.noauxiliarybar
++	.part.auxiliarybar.mobile-navigation-overlay--auxiliarybar {
++	display: block !important;
++	visibility: visible !important;
++	background: var(--vscode-sideBar-background);
++	border-left: 1px solid var(--vscode-sideBar-border);
 +}
 +
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/style.ts
@@ -828,7 +880,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.ts
-@@ -0,0 +1,271 @@
+@@ -0,0 +1,451 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -852,6 +904,14 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	'.monaco-modal-editor-block',
 +	'.context-view'
 +];
++const FOCUSABLE_SELECTOR = [
++	'a[href]',
++	'button:not([disabled])',
++	'input:not([disabled])',
++	'select:not([disabled])',
++	'textarea:not([disabled])',
++	'[tabindex]:not([tabindex="-1"])'
++].join(',');
 +
 +interface IOverlayGeometry {
 +	readonly top: number;
@@ -864,6 +924,13 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	readonly element: HTMLElement;
 +	readonly role: string | null;
 +	readonly roleIndex: number;
++	readonly label: string | null;
++}
++
++interface IOverlayAttributes {
++	readonly role: string | null;
++	readonly ariaModal: string | null;
++	readonly tabIndex: string | null;
 +}
 +
 +/** Presents existing workbench parts above the editor without changing grid visibility. */
@@ -873,7 +940,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	private readonly backdropDisposables = this._register(new DisposableStore());
 +	private activePart: Parts | undefined;
 +	private activeHost: HTMLElement | undefined;
++	private activeAttributes: IOverlayAttributes | undefined;
 +	private focusRestorationTarget: IFocusRestorationTarget | undefined;
++	private pendingFocusRestorationTarget: IFocusRestorationTarget | undefined;
 +	private pendingHistoryBack = false;
 +	private historyId = 0;
 +
@@ -893,7 +962,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +			return false;
 +		}
 +
++		const pendingFocusTarget = this.consumePendingFocusRestorationTarget();
 +		if (this.activePart === part) {
++			this.focusRestorationTarget = pendingFocusTarget ?? this.focusRestorationTarget;
 +			this.layout();
 +			return true;
 +		}
@@ -906,7 +977,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +			return false;
 +		}
 +
-+		this.focusRestorationTarget = this.captureFocusRestorationTarget();
++		this.focusRestorationTarget = pendingFocusTarget ?? this.captureFocusRestorationTarget();
 +		this.activePart = part;
 +		this.activeHost = host;
 +		this.applyOverlayClasses(element, host, part);
@@ -916,13 +987,13 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		return true;
 +	}
 +
-+	close(part?: Parts, updateHistory = true, shouldRestoreFocus = true): boolean {
++	close(part?: Parts, updateHistory = true): (() => void) | undefined {
 +		if (!this.activePart || part && this.activePart !== part) {
-+			return false;
++			return undefined;
 +		}
 +
-+		this.closeActiveOverlay(updateHistory, shouldRestoreFocus);
-+		return true;
++		const focusRestorationTarget = this.closeActiveOverlay(updateHistory);
++		return () => mainWindow.setTimeout(() => this.restoreFocus(focusRestorationTarget));
 +	}
 +
 +	isActive(part: Parts): boolean {
@@ -951,22 +1022,48 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		this.backdropDisposables.add(Gesture.addTarget(this.backdrop));
 +		this.backdropDisposables.add(addDisposableListener(this.backdrop, GestureEventType.Tap, () => this.onDidRequestClose(true)));
 +		this.backdropDisposables.add(addDisposableListener(this.backdrop, EventType.CLICK, () => this.onDidRequestClose(true)));
++		this._register(addDisposableListener(mainWindow, EventType.POINTER_DOWN, event => this.captureEventFocusTarget(event), true));
 +		this._register(addDisposableListener(mainWindow, EventType.KEY_DOWN, event => this.onKeyDown(event), true));
 +		this._register(addDisposableListener(mainWindow, 'popstate', () => this.onPopState()));
 +	}
 +
 +	private onKeyDown(event: KeyboardEvent): void {
-+		if (event.key !== 'Escape' || event.defaultPrevented || !this.activePart) {
++		this.captureEventFocusTarget(event);
++		if (event.defaultPrevented || !this.activePart) {
 +			return;
 +		}
 +
-+		if (hasHigherPriorityOverlay()) {
++		if (event.key === 'Tab') {
++			this.trapFocus(event);
++			return;
++		}
++
++		if (event.key !== 'Escape' || hasHigherPriorityOverlay()) {
 +			return;
 +		}
 +
 +		event.preventDefault();
 +		event.stopPropagation();
 +		this.onDidRequestClose(true);
++	}
++
++	private trapFocus(event: KeyboardEvent): void {
++		const target = event.target;
++		if (target instanceof HTMLElement && isHigherPriorityOverlayTarget(target)) {
++			return;
++		}
++
++		const element = this.activePart ? this.getPart(this.activePart).getContainer() : undefined;
++		if (!element) {
++			return;
++		}
++
++		const focusableElements = getFocusableElements(element);
++		const focusedIndex = getFocusedIndex(focusableElements);
++		const nextIndex = getNextFocusIndex(focusedIndex, focusableElements.length, event.shiftKey);
++		event.preventDefault();
++		event.stopImmediatePropagation();
++		(focusableElements[nextIndex] ?? element).focus();
 +	}
 +
 +	private onPopState(): void {
@@ -979,10 +1076,12 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	}
 +
 +	private applyOverlayClasses(element: HTMLElement, host: HTMLElement, part: Parts): void {
++		this.activeAttributes = captureOverlayAttributes(element);
 +		host.classList.add(OVERLAY_HOST_CLASS);
 +		element.classList.add(OVERLAY_CLASS, getPartClass(part));
 +		element.setAttribute('aria-modal', 'true');
 +		element.setAttribute('role', 'dialog');
++		element.setAttribute('tabindex', '-1');
 +	}
 +
 +	private setOverlayGeometry(host: HTMLElement, bounds: IViewportBounds, geometry: IOverlayGeometry): void {
@@ -996,9 +1095,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		this.backdrop.style.setProperty('--mobile-navigation-height', `${bounds.height}px`);
 +	}
 +
-+	private closeActiveOverlay(updateHistory: boolean, shouldRestoreFocus = true): void {
++	private closeActiveOverlay(updateHistory: boolean): IFocusRestorationTarget | undefined {
 +		if (!this.activePart || !this.activeHost) {
-+			return;
++			return undefined;
 +		}
 +
 +		const focusRestorationTarget = this.focusRestorationTarget;
@@ -1008,13 +1107,11 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		this.activePart = undefined;
 +		this.activeHost = undefined;
 +		this.backdrop.remove();
-+		if (shouldRestoreFocus) {
-+			mainWindow.setTimeout(() => this.restoreFocus(focusRestorationTarget));
-+		}
 +		if (updateHistory) {
 +			this.pendingHistoryBack = true;
 +			mainWindow.history.back();
 +		}
++		return focusRestorationTarget;
 +	}
 +
 +	private removeOverlayClasses(element: HTMLElement | undefined, host: HTMLElement, part: Parts): void {
@@ -1024,28 +1121,60 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		host.style.removeProperty('--mobile-navigation-width');
 +		host.style.removeProperty('--mobile-navigation-height');
 +		element?.classList.remove(OVERLAY_CLASS, getPartClass(part));
-+		element?.removeAttribute('aria-modal');
-+		element?.setAttribute('role', 'none');
++		if (element && this.activeAttributes) {
++			restoreOverlayAttributes(element, this.activeAttributes);
++		}
++		this.activeAttributes = undefined;
 +	}
 +
-+	private captureFocusRestorationTarget(): IFocusRestorationTarget | undefined {
-+		const element = mainWindow.document.activeElement;
++	private captureEventFocusTarget(event: Event): void {
++		const element = getEventFocusTarget(event.target);
++		const activeElement = this.activePart ? this.getPart(this.activePart).getContainer() : undefined;
++		if (!element || !this.container.contains(element) || activeElement?.contains(element) || isHigherPriorityOverlayTarget(element)) {
++			return;
++		}
++
++		const target = this.captureFocusRestorationTarget(element);
++		this.pendingFocusRestorationTarget = target;
++		mainWindow.setTimeout(() => {
++			if (this.pendingFocusRestorationTarget === target) {
++				this.pendingFocusRestorationTarget = undefined;
++			}
++		}, 1000);
++	}
++
++	private consumePendingFocusRestorationTarget(): IFocusRestorationTarget | undefined {
++		const target = this.pendingFocusRestorationTarget;
++		this.pendingFocusRestorationTarget = undefined;
++		return target;
++	}
++
++	private captureFocusRestorationTarget(element = mainWindow.document.activeElement): IFocusRestorationTarget | undefined {
 +		if (!(element instanceof HTMLElement)) {
 +			return undefined;
 +		}
 +
 +		const role = element.getAttribute('role');
 +		const roleIndex = role ? getElementsWithRole(role).indexOf(element) : -1;
-+		return { element, role, roleIndex };
++		return { element, role, roleIndex, label: getElementLabel(element) };
 +	}
 +
-+	private restoreFocus(target: IFocusRestorationTarget | undefined): void {
-+		if (!target) {
++	private restoreFocus(target: IFocusRestorationTarget | undefined, remainingAttempts = 2): void {
++		const element = resolveFocusRestorationTarget(target);
++		if (!element) {
 +			return;
 +		}
 +
-+		const element = target.element.isConnected ? target.element : getElementsWithRole(target.role)[target.roleIndex];
-+		element?.focus();
++		element.focus();
++		if (remainingAttempts === 0) {
++			return;
++		}
++
++		mainWindow.requestAnimationFrame(() => {
++			if (shouldRetryFocusRestoration(element)) {
++				this.restoreFocus(target, remainingAttempts - 1);
++			}
++		});
 +	}
 +
 +	private pushHistoryState(part: Parts): void {
@@ -1054,7 +1183,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	}
 +
 +	override dispose(): void {
-+		this.closeActiveOverlay(false, false);
++		this.closeActiveOverlay(false);
 +		super.dispose();
 +	}
 +}
@@ -1070,6 +1199,106 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +	return element.getClientRects().length > 0 && style.display !== 'none' && style.visibility !== 'hidden';
 +}
 +
++function isHigherPriorityOverlayTarget(element: HTMLElement): boolean {
++	return ESCAPE_PRIORITY_SELECTORS.some(selector => !!element.closest(selector));
++}
++
++function getEventFocusTarget(target: EventTarget | null): HTMLElement | undefined {
++	if (!(target instanceof mainWindow.Element)) {
++		return undefined;
++	}
++	return target.closest<HTMLElement>('[role="tab"], button, [role="button"], [role="menuitem"]') ?? undefined;
++}
++
++function getFocusableElements(element: HTMLElement): HTMLElement[] {
++	return Array.from(element.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isDisplayed);
++}
++
++function getFocusedIndex(elements: readonly HTMLElement[]): number {
++	const activeElement = mainWindow.document.activeElement;
++	if (!activeElement) {
++		return -1;
++	}
++
++	return elements.findIndex(element => element === activeElement || element.contains(activeElement));
++}
++
++function getNextFocusIndex(focusedIndex: number, elementCount: number, reverse: boolean): number {
++	if (elementCount === 0) {
++		return -1;
++	}
++	if (focusedIndex < 0) {
++		return reverse ? elementCount - 1 : 0;
++	}
++	return reverse
++		? (focusedIndex - 1 + elementCount) % elementCount
++		: (focusedIndex + 1) % elementCount;
++}
++
++function captureOverlayAttributes(element: HTMLElement): IOverlayAttributes {
++	return {
++		role: element.getAttribute('role'),
++		ariaModal: element.getAttribute('aria-modal'),
++		tabIndex: element.getAttribute('tabindex')
++	};
++}
++
++function restoreOverlayAttributes(element: HTMLElement, attributes: IOverlayAttributes): void {
++	restoreAttribute(element, 'role', attributes.role);
++	restoreAttribute(element, 'aria-modal', attributes.ariaModal);
++	restoreAttribute(element, 'tabindex', attributes.tabIndex);
++}
++
++function restoreAttribute(element: HTMLElement, name: string, value: string | null): void {
++	if (value === null) {
++		element.removeAttribute(name);
++		return;
++	}
++
++	element.setAttribute(name, value);
++}
++
++function resolveFocusRestorationTarget(target: IFocusRestorationTarget | undefined): HTMLElement | undefined {
++	if (!target) {
++		return undefined;
++	}
++	if (target.element.isConnected) {
++		return target.element;
++	}
++
++	const roleElements = getElementsWithRole(target.role);
++	return roleElements.find(element => getElementLabel(element) === target.label) ?? roleElements[target.roleIndex];
++}
++
++function shouldRetryFocusRestoration(element: HTMLElement): boolean {
++	if (!element.isConnected) {
++		return true;
++	}
++	const activeElement = mainWindow.document.activeElement;
++	if (!activeElement || activeElement === mainWindow.document.body || activeElement === mainWindow.document.documentElement) {
++		return true;
++	}
++	// Retry when focus went somewhere other than the desired element — composite
++	// teardown can focus the editor between the restoration attempt and the rAF.
++	return activeElement !== element && !element.contains(activeElement);
++}
++
++function getElementLabel(element: HTMLElement): string | null {
++	const own = element.getAttribute('aria-label');
++	if (own) {
++		return own;
++	}
++	// Skip descendants whose aria-label is present but empty.
++	const descendants = element.querySelectorAll<HTMLElement>('[aria-label]');
++	for (const descendant of descendants) {
++		const label = descendant.getAttribute('aria-label');
++		if (label) {
++			return label;
++		}
++	}
++	return null;
++}
++
 +function getElementsWithRole(role: string | null): HTMLElement[] {
 +	if (!role) {
 +		return [];
@@ -1080,11 +1309,17 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +}
 +
 +function isSupportedPart(part: Parts): boolean {
-+	return part === Parts.SIDEBAR_PART || part === Parts.PANEL_PART;
++	return part === Parts.SIDEBAR_PART || part === Parts.PANEL_PART || part === Parts.AUXILIARYBAR_PART;
 +}
 +
 +function getPartClass(part: Parts): string {
-+	return part === Parts.SIDEBAR_PART ? 'mobile-navigation-overlay--sidebar' : 'mobile-navigation-overlay--panel';
++	if (part === Parts.SIDEBAR_PART) {
++		return 'mobile-navigation-overlay--sidebar';
++	}
++	if (part === Parts.AUXILIARYBAR_PART) {
++		return 'mobile-navigation-overlay--auxiliarybar';
++	}
++	return 'mobile-navigation-overlay--panel';
 +}
 +
 +function getOverlayGeometry(part: Parts, bounds: IViewportBounds): IOverlayGeometry {
@@ -1093,12 +1328,9 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/mobileNavigation.t
 +		return { top: bounds.top + bounds.height - height, left: bounds.left, width: bounds.width, height };
 +	}
 +
-+	return {
-+		top: bounds.top,
-+		left: bounds.left,
-+		width: Math.min(360, Math.floor(bounds.width * 0.9)),
-+		height: bounds.height
-+	};
++	const width = Math.min(360, Math.floor(bounds.width * 0.9));
++	const left = part === Parts.AUXILIARYBAR_PART ? bounds.left + bounds.width - width : bounds.left;
++	return { top: bounds.top, left, width, height: bounds.height };
 +}
 Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/parts/paneCompositePart.ts
 ===================================================================
