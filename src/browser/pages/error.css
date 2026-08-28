@@ -6,26 +6,33 @@
 
 .error-display > .header {
   font-size: 6rem;
+  line-height: 1;
   margin: 0;
 }
 
 .error-display > .body {
   color: #444;
   color: light-dark(#444, #ccc);
-  font-size: 1.2rem;
-}
-
-.error-display > .links {
+  font-size: 1rem;
+  line-height: 1.5;
   margin-top: 16px;
 }
 
+.error-display > .links {
+  margin-top: 24px;
+}
+
 .error-display > .links > .link {
-  color: rgb(87, 114, 245);
-  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 .error-display > .links > .link:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .error-display .success {

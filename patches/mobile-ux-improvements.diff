@@ -1,0 +1,191 @@
+Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
++++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
+@@ -254,3 +254,186 @@
+ 	touch-action: manipulation;
+ }
+ 
++/* ---- Phone Layout: Safe Area ---- */
++
++/*
++ * Notched phones (iPhone 14+, many Android flagships) expose
++ * env(safe-area-inset-*) via the viewport-fit=cover meta tag. Without these
++ * insets the activity bar clips under the home indicator and the sidebar
++ * can overlap the notch in landscape. box-sizing: border-box ensures the
++ * padding does not grow the workbench beyond the viewport.
++ */
++.monaco-workbench.phone-layout {
++	padding-top: env(safe-area-inset-top);
++	padding-bottom: env(safe-area-inset-bottom);
++	padding-left: env(safe-area-inset-left);
++	padding-right: env(safe-area-inset-right);
++	box-sizing: border-box;
++}
++
++/*
++ * The menu shell must not grow into the home indicator. Subtract the bottom
++ * inset from the shell height and add it as padding so the last menu row is
++ * never obscured.
++ */
++.monaco-workbench.phone-layout .mobile-menu-shell {
++	height: calc(var(--vscode-visible-viewport-height, 100dvh) - env(safe-area-inset-bottom)) !important;
++	padding-bottom: env(safe-area-inset-bottom);
++}
++
++/* ---- Phone Layout: Status Bar ---- */
++
++/*
++ * VS Code's default status bar is ~22px — unambiguously untappable. 32px is
++ * the dense-but-finger-reachable floor on phone. The action-label exception
++ * rule (lines 45–50) already zeroes the label's own min-height inside the
++ * status bar; this compensates at the bar level.
++ */
++.monaco-workbench.phone-layout .part.statusbar {
++	min-height: 32px;
++}
++
++/* ---- Phone Layout: Keyboard Avoidance ---- */
++
++/*
++ * visibleViewport.ts computes and writes --vscode-keyboard-height to the
++ * container whenever the on-screen keyboard opens. Padding the editor part
++ * by that amount shifts content above the keyboard.
++ * ponytail: real fix feeds --vscode-keyboard-height into workbenchGrid.layout()
++ * height so Monaco's internal scroll math is keyboard-aware; add when the
++ * layout engine exposes a phone-layout height-override hook.
++ */
++.monaco-workbench.phone-layout .part.editor {
++	padding-bottom: var(--vscode-keyboard-height, 0px);
++	box-sizing: border-box;
++}
++
++/* ---- Phone Layout: Touch Feedback ---- */
++
++/*
++ * :hover never fires on a finger tap. :active provides the only synchronous
++ * visual confirmation that a tap registered. Without it, toolbar icons and
++ * menu header buttons appear completely unresponsive for the tap duration.
++ */
++.monaco-workbench.phone-layout .action-item:active > .action-label,
++.monaco-workbench.phone-layout .mobile-menu-header-action:active {
++	opacity: 0.6;
++}
++
++.monaco-workbench.phone-layout .mobile-menu-shell .monaco-action-bar.vertical .action-item:active,
++.monaco-workbench.phone-layout .mobile-menu-shell .monaco-action-bar.vertical .action-item.active {
++	background: var(--vscode-menu-selectionBackground);
++	color: var(--vscode-menu-selectionForeground);
++}
++
++/* ---- Phone Layout: Menu Shell Touch Targets ---- */
++
++/*
++ * The global .action-item > .action-label rule targets toolbar icon labels.
++ * Vertical actionbar menu rows inside the shell inherit ~26px from
++ * actionbar.css and are never overridden. Give them the 44px floor directly.
++ */
++.monaco-workbench.phone-layout .mobile-menu-shell .monaco-action-bar.vertical .action-item {
++	min-height: 44px;
++}
++
++/*
++ * The header flex container's gutter/padding area outside the header-action
++ * button can trigger double-tap-zoom on iOS without its own touch-action.
++ */
++.monaco-workbench.phone-layout .mobile-menu-header {
++	touch-action: manipulation;
++}
++
++/*
++ * Quick-input filter <input> is not covered by the .action-item / button rule.
++ * On iOS a double-tap on a bare <input> triggers viewport zoom.
++ */
++.monaco-workbench.phone-layout .quick-input-widget input {
++	touch-action: manipulation;
++}
++
++/* ---- Phone Layout: Gestures ---- */
++
++/*
++ * The backdrop exists solely to intercept and dismiss the active overlay.
++ * Gesture.addTarget(backdrop) in mobileNavigation.ts handles swipes; with
++ * touch-action: manipulation the browser still attempts a pan pass before
++ * Monaco's non-passive preventDefault fires, causing a visible bounce on
++ * swipe-down. none hands all touch handling to the script layer.
++ */
++.monaco-workbench.phone-layout .mobile-navigation-backdrop {
++	touch-action: none;
++}
++
++/*
++ * A fast fling inside an overlay can chain momentum through the semi-transparent
++ * backdrop to the document underneath. contain keeps momentum inside the overlay.
++ */
++.monaco-workbench.phone-layout .mobile-navigation-overlay-host {
++	overscroll-behavior: contain;
++}
++
++/* ---- Phone Layout: Overlay Animation ---- */
++
++/*
++ * Overlays previously snapped in with transform: none !important — a hard
++ * cancel that also prevented any entrance animation. The host now carries a
++ * transition; modifier classes define the off-screen start position;
++ * .overlay-active restores transform: none so the overlay is visible.
++ * mobileNavigation.ts must add overlay-active on show and remove it on close
++ * to activate the animation.
++ * ponytail: remove transform: none !important from the base
++ * .mobile-navigation-overlay-host rule once mobileNavigation.ts toggles
++ * overlay-active; until then both rules coexist safely because .overlay-active
++ * is more specific.
++ */
++.monaco-workbench.phone-layout .mobile-navigation-overlay-host {
++	transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-overlay-host.overlay-sidebar:not(.overlay-active) {
++	transform: translateX(-100%) !important;
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-overlay-host.overlay-panel:not(.overlay-active) {
++	transform: translateY(100%) !important;
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-overlay-host.overlay-active {
++	transform: none !important;
++}
++
++/*
++ * Backdrop dismissal previously used synchronous DOM removal with no
++ * transition. An opacity fade gives visual confirmation of tap-to-dismiss.
++ * closeActiveOverlay in mobileNavigation.ts must add .is-closing, await
++ * transitionend, then call remove() — otherwise the element is gone before
++ * the transition fires.
++ */
++.monaco-workbench.phone-layout .mobile-navigation-backdrop {
++	transition: opacity 200ms ease;
++}
++
++.monaco-workbench.phone-layout .mobile-navigation-backdrop.is-closing {
++	opacity: 0;
++}
++
++/* ---- Phone Layout: Text Selection ---- */
++
++/*
++ * user-select: none on .action-item and .monaco-toolbar (lines 63–68) is
++ * intentional for toolbars, but it bleeds into .view-lines via cascade.
++ * viewLines.css re-enables it only for .monaco-editor.mac (hover) and
++ * .monaco-editor.enable-user-select — neither class is set on Android/iOS.
++ * Without this override, long-press in the editor produces no native text
++ * selection handles and the user must rely solely on Monaco's canvas overlay.
++ * ponytail: may conflict with Monaco's touch-selection canvas overlay on some
++ * Android versions; add a kill-switch CSS class if regression detected.
++ */
++.monaco-workbench.phone-layout .monaco-editor .view-lines,
++.monaco-workbench.phone-layout .monaco-editor .view-line {
++	user-select: text;
++	-webkit-user-select: text;
++}
++

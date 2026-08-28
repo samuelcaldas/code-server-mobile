@@ -37,10 +37,12 @@ body {
   box-sizing: border-box;
   flex: 1;
   padding: 16px;
+  touch-action: manipulation;
 }
 
 .login-form > .field > .password::placeholder {
-  color: rgb(148 163 184);
+  color: #9ca3af;
+  color: light-dark(#9ca3af, #6b7280);
 }
 
 .login-form > .field > .password:focus {
