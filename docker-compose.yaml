@@ -1,0 +1,32 @@
+services:
+  code-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: code-server-mobile:latest
+    container_name: code-server-mobile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8088}:8080"
+    environment:
+      - TZ=America/Sao_Paulo
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - PASSWORD=${PASSWORD:-timoteo2026}
+      - SUDO_PASSWORD=${SUDO_PASSWORD:-timoteo2026}
+      - PROXY_DOMAIN=code.dev.timoteo.mg.gov.br
+      - DEFAULT_WORKSPACE=/home/coder/workspace
+    volumes:
+      - code-server-data:/home/coder
+      - code-server-workspace:/home/coder/workspace
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  code-server-data:
+    driver: local
+  code-server-workspace:
+    driver: local

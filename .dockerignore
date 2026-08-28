@@ -1,3 +1,6 @@
 **
+!release
 !release-packages
 !ci
+!Dockerfile
+!docker-compose.yaml

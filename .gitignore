@@ -26,3 +26,6 @@ test/test-results
 # Playwright's internal data.
 .playwright-mcp/
 *.png
+
+# Environment
+.env
