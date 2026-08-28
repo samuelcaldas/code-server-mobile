@@ -422,7 +422,7 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.css
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,261 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -646,6 +646,11 @@ Index: code-server-mobile/lib/vscode/src/vs/workbench/browser/media/phoneLayout.
 +	display: flex !important;
 +	flex-direction: column !important;
 +	background: var(--vscode-menu-background);
++}
++
++.monaco-workbench.phone-layout .mobile-menu-shell[style*="display: none"],
++.monaco-workbench.phone-layout .context-view[style*="display: none"] {
++	display: none !important;
 +}
 +
 +.monaco-workbench.phone-layout .mobile-menu-shell > .monaco-scrollable-element {
@@ -1929,6 +1934,15 @@ Index: code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
  import { isFirefox } from '../../browser.js';
  import { EventType as TouchEventType, Gesture } from '../../touch.js';
  import { $, addDisposableListener, append, clearNode, Dimension, EventHelper, EventLike, EventType, getActiveElement, getWindow, IDomNodePagePosition, isAncestor, isInShadowDOM } from '../../dom.js';
+@@ -21,7 +22,7 @@ import { Event } from '../../../common/e
+ import { stripIcons } from '../../../common/iconLabels.js';
+ import { KeyCode } from '../../../common/keyCodes.js';
+ import { ResolvedKeybinding } from '../../../common/keybindings.js';
+-import { DisposableStore } from '../../../common/lifecycle.js';
++import { DisposableStore, toDisposable } from '../../../common/lifecycle.js';
+ import { isLinux, isMacintosh } from '../../../common/platform.js';
+ import { ScrollbarVisibility, ScrollEvent } from '../../../common/scrollable.js';
+ import * as strings from '../../../common/strings.js';
 @@ -106,6 +107,8 @@ export class Menu extends ActionBar {
  	constructor(container: HTMLElement, actions: ReadonlyArray<IAction>, options: IMenuOptions, private readonly menuStyles: IMenuStyles) {
  		container.classList.add('monaco-menu-container');
@@ -1960,13 +1974,18 @@ Index: code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
  
  		actions = actions.filter((a, idx) => {
  			if (options.submenuIds?.has(a.id)) {
-@@ -298,11 +303,35 @@ export class Menu extends ActionBar {
+@@ -298,11 +303,40 @@ export class Menu extends ActionBar {
  		container.appendChild(this.scrollableElement.getDomNode());
  		this.scrollableElement.scanDomNode();
  
 +		if (isPhoneMenu) {
 +			container.classList.add('mobile-menu-shell');
-+			container.insertBefore(this.createMobileMenuHeader(isSubmenuLevel), this.scrollableElement.getDomNode());
++			const header = this.createMobileMenuHeader(isSubmenuLevel);
++			container.insertBefore(header, this.scrollableElement.getDomNode());
++			this._register(toDisposable(() => {
++				container.classList.remove('mobile-menu-shell');
++				header.remove();
++			}));
 +		}
 +
  		this.viewItems.filter(item => !(item instanceof MenuSeparatorActionViewItem)).forEach((item, index, array) => {
@@ -1996,7 +2015,7 @@ Index: code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
  	private initializeOrUpdateStyleSheet(container: HTMLElement, style: IMenuStyles): void {
  		if (!this.styleSheet) {
  			if (isInShadowDOM(container)) {
-@@ -828,6 +857,16 @@ class SubmenuMenuActionViewItem extends
+@@ -828,6 +862,16 @@ class SubmenuMenuActionViewItem extends
  	}
  
  	override onClick(e: EventLike): void {
@@ -2013,7 +2032,7 @@ Index: code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
  		// stop clicking from trying to run an action
  		EventHelper.stop(e, true);
  
-@@ -847,6 +886,7 @@ class SubmenuMenuActionViewItem extends
+@@ -847,6 +891,7 @@ class SubmenuMenuActionViewItem extends
  			this.updateAriaExpanded('false');
  			if (this.submenuContainer) {
  				this.submenuDisposables.clear();
@@ -2021,7 +2040,7 @@ Index: code-server-mobile/lib/vscode/src/vs/base/browser/ui/menu/menu.ts
  				this.submenuContainer = undefined;
  			}
  		}
-@@ -979,6 +1019,7 @@ class SubmenuMenuActionViewItem extends
+@@ -979,6 +1024,7 @@ class SubmenuMenuActionViewItem extends
  		}
  
  		if (this.submenuContainer) {
@@ -2033,7 +2052,7 @@ Index: code-server-mobile/lib/vscode/src/vs/base/test/browser/ui/menu/menu.test.
 ===================================================================
 --- /dev/null
 +++ code-server-mobile/lib/vscode/src/vs/base/test/browser/ui/menu/menu.test.ts
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,83 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -2102,5 +2121,18 @@ Index: code-server-mobile/lib/vscode/src/vs/base/test/browser/ui/menu/menu.test.
 +		header.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 +
 +		assert.strictEqual(cancelled, true);
++	});
++
++	test('disposal removes mobile-menu-shell and header from container', () => {
++		const container = createPhoneLayoutContainer(false);
++		const menu = new Menu(container, [createAction()], {}, unthemedMenuStyles);
++
++		assert.strictEqual(container.classList.contains('mobile-menu-shell'), true);
++		assert(container.querySelector('.mobile-menu-header') !== null, 'Header not found');
++
++		menu.dispose();
++
++		assert.strictEqual(container.classList.contains('mobile-menu-shell'), false);
++		assert.strictEqual(container.querySelector('.mobile-menu-header'), null);
 +	});
 +});

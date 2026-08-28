@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-28T01:00:00.000Z",
+  "title": "Design System: code-server",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Royal Code Blue",
+        "canonical": "#5772f5",
+        "tonalRamp": ["#101a40", "#182860", "#243c90", "#3354cc", "#5772f5", "#7e93f7", "#abbaf9", "#dbe3fd"]
+      },
+      "primary-dark": {
+        "role": "primary",
+        "displayName": "Deep Sapphire Blue",
+        "canonical": "#1a56db",
+        "tonalRamp": ["#081944", "#0e2c77", "#1441aa", "#1a56db", "#3f77ea", "#709cf0", "#a5c1f6", "#dce7fb"]
+      },
+      "focus-ring": {
+        "role": "accent",
+        "displayName": "Electric Focus Blue",
+        "canonical": "#3f83f8",
+        "tonalRamp": ["#082046", "#0f3678", "#1954bb", "#2c6ef1", "#3f83f8", "#6ea3fa", "#a0c3fc", "#d9e8fe"]
+      },
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "VS Code Dark Canvas",
+        "canonical": "#1e1e1e",
+        "tonalRamp": ["#111111", "#181818", "#1e1e1e", "#252526", "#2d2d2d", "#3c3c3c", "#5a5a5a", "#858585"]
+      },
+      "canvas-light": {
+        "role": "neutral",
+        "displayName": "Web Canvas Light",
+        "canonical": "#f4f7fc",
+        "tonalRamp": ["#2b3548", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#e5e7eb", "#f3f4f6", "#f4f7fc"]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Dark Card Surface",
+        "canonical": "#1f2937",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"]
+      },
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Light Card Surface",
+        "canonical": "#fafdf8",
+        "tonalRamp": ["#1f2937", "#374151", "#4b5563", "#9ca3af", "#d1d5db", "#e5e7eb", "#f4f7fc", "#fafdf8"]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "#111111",
+        "tonalRamp": ["#000000", "#111111", "#222222", "#444444", "#666666", "#999999", "#cccccc", "#ffffff"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "#555555",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#555555", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"]
+      },
+      "border-subtle": {
+        "role": "neutral",
+        "displayName": "Subtle Border",
+        "canonical": "#dddddd",
+        "tonalRamp": ["#111827", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#cccccc", "#dddddd", "#f3f4f6"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero and large numeric error codes." },
+      "title": { "displayName": "Title", "purpose": "Card headers and dialog titles." },
+      "body": { "displayName": "Body", "purpose": "Standard prose and form labels." },
+      "mono": { "displayName": "Monospace", "purpose": "Code editor and terminal output." }
+    },
+    "shadows": [
+      {
+        "name": "card-elevation",
+        "value": "0 7px 14px 0 rgba(60,66,87, 0.12), 0 3px 6px 0 rgba(0,0,0, 0.12)",
+        "purpose": "Authentication and setup cards."
+      },
+      {
+        "name": "overlay-elevation",
+        "value": "0 0 16px var(--vscode-widget-shadow)",
+        "purpose": "Mobile navigation overlays and drawers."
+      }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Drawer and overlay transitions." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "640px" },
+      { "name": "phone-landscape-width", "value": "960px" },
+      { "name": "phone-landscape-height", "value": "480px" },
+      { "name": "tablet", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary call-to-action on auth and error pages.",
+      "html": "<button class=\"ds-btn-primary\">Sign In</button>",
+      "css": ".ds-btn-primary { background-color: #5772f5; color: #ffffff; border-radius: 5px; border: none; padding: 18px 20px; font-weight: 500; font-size: 1rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation; transition: background-color 0.15s ease; } .ds-btn-primary:hover { background-color: #1a56db; } .ds-btn-primary:focus-visible { outline: 2px solid #3f83f8; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card Box",
+      "kind": "card",
+      "refersTo": "card-box",
+      "description": "Centrally aligned card container for auth and standalone forms.",
+      "html": "<div class=\"ds-card-box\"><div class=\"ds-card-header\"><h2 class=\"ds-card-title\">code-server</h2><p class=\"ds-card-subtitle\">Sign in to continue</p></div><div class=\"ds-card-content\"><input class=\"ds-input-text\" type=\"password\" placeholder=\"Password\" /><button class=\"ds-btn-primary\" style=\"margin-top: 16px;\">Submit</button></div></div>",
+      "css": ".ds-card-box { background-color: #fafdf8; border-radius: 5px; box-shadow: 0 7px 14px 0 rgba(60,66,87, 0.12), 0 3px 6px 0 rgba(0,0,0, 0.12); max-width: 650px; width: 100%; box-sizing: border-box; overflow: hidden; } .ds-card-header { border-bottom: 1px solid #dddddd; padding: 30px; } .ds-card-title { margin: 0; font-size: 1.5rem; font-weight: 600; color: #111111; } .ds-card-subtitle { margin: 10px 0 0 0; color: #555555; font-size: 0.95rem; } .ds-card-content { padding: 40px; display: flex; flex-direction: column; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "Form input field for authentication.",
+      "html": "<input class=\"ds-input-text\" type=\"text\" placeholder=\"Enter value...\" />",
+      "css": ".ds-input-text { background-color: #f4f7fc; border-radius: 5px; border: 1px solid #dddddd; padding: 16px; font-size: 1rem; width: 100%; box-sizing: border-box; color: #111111; } .ds-input-text:focus { outline: 2px solid #3f83f8; border-color: transparent; } .ds-input-text::placeholder { color: #9ca3af; }"
+    },
+    {
+      "name": "Mobile Touch Action Item",
+      "kind": "custom",
+      "refersTo": "mobile-action-item",
+      "description": "Ergonomic 44px touch action item for compact mobile workbench.",
+      "html": "<div class=\"ds-mobile-action-item\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z\"/></svg></div>",
+      "css": ".ds-mobile-action-item { min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: inherit; touch-action: manipulation; -webkit-user-select: none; user-select: none; } .ds-mobile-action-item:hover { background-color: rgba(255, 255, 255, 0.08); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pocket IDE & Studio",
+    "overview": "code-server provides a precision developer workstation running full VS Code in the browser. The system balances high-density information architecture on desktop displays with ergonomic, touch-first affordances and transient navigation overlays on mobile phones.",
+    "keyCharacteristics": [
+      "Dynamic viewport classification based on live geometry without reload",
+      "Minimum 44px touch targets on mobile viewports",
+      "Zero regressions to desktop keyboard, mouse, and multi-part layouts",
+      "Transient overlay navigation avoiding editor shrink on small screens"
+    ],
+    "rules": [
+      {
+        "name": "The Touch Floor Rule",
+        "body": "Interactive controls in mobile phone layout must maintain a minimum 44px hit target area.",
+        "section": "layout"
+      },
+      {
+        "name": "The Geometry Gate Rule",
+        "body": "Classify layout modes strictly using container geometry rather than user-agent sniffing.",
+        "section": "layout"
+      },
+      {
+        "name": "The Overlay Integrity Rule",
+        "body": "Mobile sidebars and panels must render as transient overlay surfaces above the editor rather than reclaiming editor grid width.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do use 44px minimum touch targets on mobile phone layouts.",
+      "Do rely on live container geometry for layout adaptation.",
+      "Do preserve VS Code native theme tokens across dark and light themes.",
+      "Do contain overscroll within lists and editors on mobile."
+    ],
+    "donts": [
+      "Don't shrink editor grid dimensions when opening mobile sidebars or panels.",
+      "Don't use user-agent sniffing to determine layout modes.",
+      "Don't introduce custom gesture layers that conflict with VS Code's Gesture engine.",
+      "Don't compromise desktop mouse and keyboard shortcut workflows."
+    ]
+  }
+}

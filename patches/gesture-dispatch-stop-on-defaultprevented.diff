@@ -1,0 +1,39 @@
+Stop Gesture from re-dispatching a claimed touch event to outer targets
+
+`Gesture.dispatchEvent()` collects every registered `Gesture.addTarget`
+element that contains the touch point, sorts them nearest-ancestor first,
+and dispatches the same synthetic event (tap, contextmenu, etc.) to each of
+them in turn, unconditionally. Many workbench UI parts register both an
+inner element and one of its ancestors as separate Gesture targets, each
+with its own handler for the same event type — for example an editor tab
+(`.tab`) and its enclosing `.tabs-container` both listen for
+`TouchEventType.Contextmenu` and each open a context menu. A single
+long-press therefore fires two competing `showContextMenu()` calls in the
+same synchronous loop; the second call's `ContextViewService` view replaces
+the first, so the menu that briefly appeared for the correct (inner) target
+immediately closes. This reproduces on long-press across the editor,
+explorer, and tab bar, matching the "context menu opens then instantly
+closes" report.
+
+The fix stops the dispatch loop once a handler has claimed the event via
+`preventDefault()`, mirroring standard DOM propagation semantics: once
+something has handled the gesture, ancestors should not also react to it.
+This generalizes the one-off `defaultPrevented` guard already carried by
+`SubmenuMenuActionViewItem.onClick` (see responsive-workbench.diff) into a
+single fix at the dispatch source instead of scattering guards across every
+callsite.
+
+Index: code-server-mobile/lib/vscode/src/vs/base/browser/touch.ts
+===================================================================
+--- code-server-mobile.orig/lib/vscode/src/vs/base/browser/touch.ts
++++ code-server-mobile/lib/vscode/src/vs/base/browser/touch.ts
+@@ -302,6 +302,9 @@ export class Gesture extends Disposable
+ 			for (const [_, target] of targets) {
+ 				target.dispatchEvent(event);
+ 				this.dispatched = true;
++				if (event.defaultPrevented) {
++					break;
++				}
+ 			}
+ 		}
+ 	}

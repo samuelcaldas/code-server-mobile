@@ -602,6 +602,18 @@ export class CodeServerPage {
   }
 
   /**
+   * Simulate a stationary touch-and-hold at (x, y) long enough to trigger
+   * `Gesture`'s `-monaco-gesturecontextmenu` (see vs/base/browser/touch.ts,
+   * which fires after 700ms with less than 30px of movement), then release.
+   */
+  async longPress(x: number, y: number): Promise<void> {
+    const client = await this.page.context().newCDPSession(this.page)
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
+    await this.page.waitForTimeout(800)
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+  }
+
+  /**
    * Execute a command in the root of the instance's workspace directory.
    */
   async exec(command: string): Promise<void> {

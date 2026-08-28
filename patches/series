@@ -25,4 +25,6 @@ signature-verification.diff
 copilot.diff
 app-name.diff
 responsive-workbench.diff
+gesture-dispatch-stop-on-defaultprevented.diff
+mobile-ux-improvements.diff
 csp-hashes.diff
