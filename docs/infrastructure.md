@@ -47,20 +47,16 @@ NPM is hosted on **`fs01002`** (`10.250.50.60`). Apply the following settings ma
 | **HTTP/2 Support** | `Enabled` |
 | **HSTS Enabled** | `Enabled` |
 
-### 3. Advanced Configuration (Custom Nginx Configuration)
+### 3. Custom Nginx Configuration (Advanced)
 
-Paste into the **Advanced** tab in NPM to ensure large WebSocket payloads and long-lived terminal sessions don't disconnect:
+> [!IMPORTANT]
+> O Nginx Proxy Manager já injeta os headers `Upgrade`, `Connection`, `Host`, `X-Forwarded-For` e `proxy_http_version 1.1` automaticamente quando o toggle **Websockets Support** está ativado no NPM.
+> **Não repita** `proxy_set_header` no campo Custom Nginx Configuration, pois causa conflito de sintaxe/escopo no template do NPM e derruba o proxy.
+
+No campo **Custom Nginx Configuration**, adicione apenas as diretivas de timeout e limite de upload (ou deixe em branco):
 
 ```nginx
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection "upgrade";
-proxy_set_header Host $host;
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_set_header X-Forwarded-Proto $scheme;
-
-proxy_http_version 1.1;
+client_max_body_size 100M;
 proxy_read_timeout 86400s;
 proxy_send_timeout 86400s;
-client_max_body_size 100M;
 ```
