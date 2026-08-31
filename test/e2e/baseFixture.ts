@@ -49,6 +49,9 @@ interface TestFixtures {
 export const test = base.extend<TestFixtures>({
   codeServer: undefined, // No default; should be provided through `test.use`.
   codeServerPage: async ({ codeServer, page }, use) => {
+    page.on("console", (msg) => console.log("[BROWSER CONSOLE]", msg.type(), msg.text()))
+    page.on("pageerror", (err) => console.log("[BROWSER ERROR]", err.message))
+
     // It's possible code-server might prevent navigation because of unsaved
     // changes (seems to happen based on timing even if no changes have been
     // made too). In these cases just accept.
@@ -56,6 +59,13 @@ export const test = base.extend<TestFixtures>({
 
     const codeServerPage = new CodeServerPage(codeServer, page)
     await codeServerPage.navigate()
+
+    // Dismiss any initial modal dialog (e.g. workspace trust / startup prompt)
+    const dialogBtn = page.locator(".monaco-dialog-box button")
+    if (await dialogBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await dialogBtn.first().click().catch(() => {})
+    }
+
     await use(codeServerPage)
   },
 })

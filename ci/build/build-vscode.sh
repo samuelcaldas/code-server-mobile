@@ -110,7 +110,9 @@ EOF
 
   VSCODE_QUALITY=stable npm run gulp compile-copilot-extension-full-build
 
-  npm run gulp core-ci
+  node --experimental-strip-types build/next/index.ts transpile --out out-build
+  node --experimental-strip-types build/next/index.ts bundle ${MINIFY:+--minify} --nls --target server-web --out "out-vscode-reh-web${MINIFY:+-min}"
+
   npm run gulp "vscode-reh-web-$VSCODE_TARGET${MINIFY:+-min}-ci"
 
   # Reset so if you develop after building you will not be stuck with the wrong

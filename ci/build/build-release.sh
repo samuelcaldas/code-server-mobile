@@ -64,11 +64,13 @@ bundle_code_server() {
   rsync src/browser/pages/*.css "$RELEASE_PATH/src/browser/pages"
   rsync src/browser/robots.txt "$RELEASE_PATH/src/browser"
 
+  local VSCODE_REH_DIR="./lib/vscode-reh-web-$VSCODE_TARGET"
+
   # Adds the commit to package.json
   jq --slurp '(.[0] | del(.scripts,.jest,.devDependencies)) * .[1]' package.json <(
     cat << EOF
   {
-    "version": "$(jq -r .codeServerVersion "./lib/vscode-reh-web-$VSCODE_TARGET/product.json")",
+    "version": "$(jq -r .codeServerVersion "$VSCODE_REH_DIR/product.json")",
     "commit": "$(git rev-parse HEAD)",
     "scripts": {
       "postinstall": "sh ./postinstall.sh"
@@ -98,6 +100,7 @@ EOF
 }
 
 bundle_vscode() {
+  local VSCODE_REH_DIR="./lib/vscode-reh-web-$VSCODE_TARGET"
   mkdir -p "$VSCODE_OUT_PATH"
 
   local rsync_opts=(-a)
@@ -119,11 +122,11 @@ bundle_vscode() {
     rsync_opts+=(--exclude node_modules)
   fi
 
-  rsync "${rsync_opts[@]}" "./lib/vscode-reh-web-$VSCODE_TARGET/" "$VSCODE_OUT_PATH"
+  rsync "${rsync_opts[@]}" "$VSCODE_REH_DIR/" "$VSCODE_OUT_PATH"
 
   # Copy the Node binary.
   if [[ $KEEP_MODULES = 1 ]]; then
-    cp "./lib/vscode-reh-web-$VSCODE_TARGET/node" "$RELEASE_PATH/lib"
+    cp "$VSCODE_REH_DIR/node" "$RELEASE_PATH/lib"
   fi
 
   # Merge the package.json for the web/remote server so we can include
