@@ -43,16 +43,7 @@ describe("mobile all menus and buttons exhaustive validation", ["--disable-works
     const outputDir = path.join(__dirname, "../../.playwright-mcp")
     const appMenu = page.getByRole("menuitem", { name: "Application Menu" })
 
-    const rootMenuItems = [
-      "File",
-      "Edit",
-      "Selection",
-      "View",
-      "Go",
-      "Run",
-      "Terminal",
-      "Help",
-    ]
+    const rootMenuItems = ["File", "Edit", "Selection", "View", "Go", "Run", "Terminal", "Help"]
 
     for (const item of rootMenuItems) {
       // Open root menu

@@ -15,9 +15,13 @@ describe("mobile developer workflows", ["--disable-workspace-trust"], {}, () => 
     await expect(editorTab).toBeVisible()
 
     // Type code into editor
-    const editor = page.locator("#workbench\\.parts\\.editor .monaco-editor.focused, #workbench\\.parts\\.editor .monaco-editor")
+    const editor = page.locator(
+      "#workbench\\.parts\\.editor .monaco-editor.focused, #workbench\\.parts\\.editor .monaco-editor",
+    )
     await editor.first().click()
-    await page.keyboard.insertText("// Mobile TypeScript Function\nfunction calculateTotal(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\nconsole.log(calculateTotal([10, 20, 30]));\n")
+    await page.keyboard.insertText(
+      "// Mobile TypeScript Function\nfunction calculateTotal(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\nconsole.log(calculateTotal([10, 20, 30]));\n",
+    )
 
     await expect(editorTab).toHaveClass(/dirty/)
     await page.screenshot({ path: path.join(outputDir, "01_wf_new_file_edited.png") })

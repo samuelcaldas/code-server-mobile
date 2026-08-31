@@ -95,15 +95,18 @@ browser regression signal, not device certification.
 ## Automated coverage and blind spots
 
 The eight passing [`mobile.layout.test.ts`](../test/e2e/mobile.layout.test.ts)
-tests run only under [`Mobile Chromium`](../test/playwright.config.ts), a 390x844
+tests run under [`Mobile Chromium`](../test/playwright.config.ts), a 390x844
 Chromium context with `isMobile` and `hasTouch`. They cover portrait, 844x390
 rotation, DeX restoration, desktop visibility persistence across compact reload,
 maximized-panel compact startup and editor visibility, hidden-panel remembered
-maximized state, and maximized auxiliary-bar transitions. This is browser
-emulation, not Android Chrome, iOS Safari, installed-PWA, or physical-device
-certification. It does not cover keyboard viewport handling, focus restoration,
-back navigation, assistive technology, actual tap workflows in terminal or editor,
-drag-and-drop, or transient drawer surfaces.
+maximized state, and maximized auxiliary-bar transitions.
+
+Complementing this, the passing [`mobile.topbar-and-single-screen.test.ts`](../test/e2e/mobile.topbar-and-single-screen.test.ts)
+test suite verifies:
+
+1. Activity Bar rendering as a horizontal topbar with min 44px tap targets on phone portrait view.
+2. File Explorer taking 100% viewport width (`100vw`) and returning seamlessly to the full-width Code Editor upon file opening or tab toggle.
+3. Source Control (Git), Search, and Extensions each taking 100% viewport width as single-element focus views without split-screen artifacts.
 
 Nine passing [`viewportPolicy.test.ts`](../lib/vscode/src/vs/workbench/test/browser/viewportPolicy.test.ts)
 browser tests directly cover policy classification, invalid geometry, and

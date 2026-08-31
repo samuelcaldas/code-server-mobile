@@ -63,7 +63,10 @@ export const test = base.extend<TestFixtures>({
     // Dismiss any initial modal dialog (e.g. workspace trust / startup prompt)
     const dialogBtn = page.locator(".monaco-dialog-box button")
     if (await dialogBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await dialogBtn.first().click().catch(() => {})
+      await dialogBtn
+        .first()
+        .click()
+        .catch(() => {})
     }
 
     await use(codeServerPage)

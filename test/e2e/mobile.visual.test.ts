@@ -36,14 +36,14 @@ describe("mobile visual validation", ["--disable-workspace-trust"], {}, () => {
     const subMenuShell = page.locator(".mobile-menu-shell").last()
     await expect(subMenuShell.getByRole("button", { name: "Back" })).toBeVisible()
     const rootStructure = await menuShell.evaluate((el) => {
-      const items = Array.from(el.querySelectorAll('.actions-container > .action-item'));
-      return items.map(it => ({
+      const items = Array.from(el.querySelectorAll(".actions-container > .action-item"))
+      return items.map((it) => ({
         text: it.textContent?.trim().slice(0, 15),
         display: window.getComputedStyle(it).display,
-        hasSubmenu: !!it.querySelector('.monaco-submenu')
-      }));
-    });
-    console.log("DEBUG_ROOT_STRUCTURE:", JSON.stringify(rootStructure));
+        hasSubmenu: !!it.querySelector(".monaco-submenu"),
+      }))
+    })
+    console.log("DEBUG_ROOT_STRUCTURE:", JSON.stringify(rootStructure))
     await page.screenshot({ path: path.join(outputDir, "05_mobile_menu_submenu.png") })
 
     // Close menu

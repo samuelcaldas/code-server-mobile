@@ -28,24 +28,24 @@ NPM is hosted on **`fs01002`** (`10.250.50.60`). Apply the following settings ma
 
 ### 1. Proxy Host Settings
 
-| Setting | Value |
-| :--- | :--- |
-| **Domain Names** | `code.dev.timoteo.mg.gov.br` |
-| **Scheme** | `http` |
-| **Forward Hostname / IP** | `10.250.50.165` |
-| **Forward Port** | `8088` |
-| **Cache Assets** | `Disabled` |
-| **Block Common Exploits** | `Enabled` |
-| **Websockets Support** | `Enabled` (Mandatory for VS Code workbench & terminal RPC) |
+| Setting                   | Value                                                      |
+| :------------------------ | :--------------------------------------------------------- |
+| **Domain Names**          | `code.dev.timoteo.mg.gov.br`                               |
+| **Scheme**                | `http`                                                     |
+| **Forward Hostname / IP** | `10.250.50.165`                                            |
+| **Forward Port**          | `8088`                                                     |
+| **Cache Assets**          | `Disabled`                                                 |
+| **Block Common Exploits** | `Enabled`                                                  |
+| **Websockets Support**    | `Enabled` (Mandatory for VS Code workbench & terminal RPC) |
 
 ### 2. SSL Configuration
 
-| Setting | Value |
-| :--- | :--- |
+| Setting             | Value                                                               |
+| :------------------ | :------------------------------------------------------------------ |
 | **SSL Certificate** | `*.dev.timoteo.mg.gov.br` (Wildcard Let's Encrypt / Municipal Cert) |
-| **Force SSL** | `Enabled` |
-| **HTTP/2 Support** | `Enabled` |
-| **HSTS Enabled** | `Enabled` |
+| **Force SSL**       | `Enabled`                                                           |
+| **HTTP/2 Support**  | `Enabled`                                                           |
+| **HSTS Enabled**    | `Enabled`                                                           |
 
 ### 3. Custom Nginx Configuration (Advanced)
 

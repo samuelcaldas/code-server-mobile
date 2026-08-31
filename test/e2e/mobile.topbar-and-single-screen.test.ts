@@ -14,20 +14,20 @@ describe("mobile topbar and single-screen full-width navigation", ["--disable-wo
     await expect(activityBar).toBeVisible()
 
     const debugInfo = await page.evaluate(() => {
-      const sheets = Array.from(document.styleSheets).map(s => {
+      const sheets = Array.from(document.styleSheets).map((s) => {
         try {
-          return { href: s.href, rulesCount: s.cssRules.length };
+          return { href: s.href, rulesCount: s.cssRules.length }
         } catch (e) {
-          return { href: s.href, error: String(e) };
+          return { href: s.href, error: String(e) }
         }
-      });
-      const styleTags = Array.from(document.querySelectorAll('style')).map(s => ({
+      })
+      const styleTags = Array.from(document.querySelectorAll("style")).map((s) => ({
         className: s.className,
-        contentPreview: s.textContent?.slice(0, 100)
-      }));
-      return { sheets, styleTags };
-    });
-    console.log("DEBUG_STYLESHEETS:", JSON.stringify(debugInfo, null, 2));
+        contentPreview: s.textContent?.slice(0, 100),
+      }))
+      return { sheets, styleTags }
+    })
+    console.log("DEBUG_STYLESHEETS:", JSON.stringify(debugInfo, null, 2))
 
     const activityBarBox = await activityBar.boundingBox()
     expect(activityBarBox).not.toBeNull()
@@ -51,7 +51,9 @@ describe("mobile topbar and single-screen full-width navigation", ["--disable-wo
     await page.screenshot({ path: path.join(outputDir, "01_topbar_portrait_code_editor.png") })
   })
 
-  test("2. Verify File Explorer takes 100% screen width and file selection returns to full-width editor", async ({ codeServerPage }) => {
+  test("2. Verify File Explorer takes 100% screen width and file selection returns to full-width editor", async ({
+    codeServerPage,
+  }) => {
     const page = codeServerPage.page
     const outputDir = path.join(__dirname, "../../.playwright-mcp")
     const viewport = page.viewportSize()!
@@ -91,7 +93,9 @@ describe("mobile topbar and single-screen full-width navigation", ["--disable-wo
     await page.screenshot({ path: path.join(outputDir, "03_topbar_portrait_file_opened_editor_fullwidth.png") })
   })
 
-  test("3. Verify Source Control (Git), Search, and Extensions each take 100% screen width", async ({ codeServerPage }) => {
+  test("3. Verify Source Control (Git), Search, and Extensions each take 100% screen width", async ({
+    codeServerPage,
+  }) => {
     const page = codeServerPage.page
     const outputDir = path.join(__dirname, "../../.playwright-mcp")
     const viewport = page.viewportSize()!
